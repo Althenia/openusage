@@ -81,6 +81,10 @@ struct DefaultAccountObserver: Sendable {
             }
             configDir = raw
         }
+        return observeClaude(configDirectory: configDir)
+    }
+
+    func observeClaude(configDirectory configDir: String) -> Outcome {
         let anchor = expandTilde(configDir)
         // The identity file sits inside a custom config dir, but next to (not inside) the default
         // `~/.claude` — Claude Code keeps the default's state at `~/.claude.json`.

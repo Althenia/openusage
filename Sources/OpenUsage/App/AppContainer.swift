@@ -19,6 +19,7 @@ final class AppContainer {
     /// `APIKeyManaging`. Each matching Customize provider detail shows an API Key section and writes
     /// changes through the capability. Empty when no installed provider needs a user key.
     let apiKeyProviders: [any APIKeyManaging]
+    let profiles: ProviderProfilesStore
     /// Quota pace notification preferences (three independent triggers). Drives the Settings section
     /// and is read by `WidgetDataStore.evaluateNotifications`.
     let notificationSettings: NotificationSettingsStore
@@ -124,6 +125,7 @@ final class AppContainer {
         self.registry = registry
         self.enablement = enablement
         self.apiKeyProviders = apiKeyProviders
+        self.profiles = ProviderProfilesStore()
         self.notificationSettings = notificationSettings
         self.layout = layout
         self.dataStore = dataStore

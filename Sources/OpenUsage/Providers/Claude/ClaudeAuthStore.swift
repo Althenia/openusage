@@ -77,6 +77,8 @@ struct ClaudeAuthStore: Sendable {
     let desktopOnly: Bool
     let swapAccount: ClaudeSwapAccount?
     let preferOrganizationScopedDesktop: Bool
+    let configDirectory: String?
+    let profileConfigDirectories: [String]
 
     init(
         environment: EnvironmentReading = ProcessEnvironmentReader(),
@@ -88,8 +90,12 @@ struct ClaudeAuthStore: Sendable {
         desktopOnly: Bool = false,
         swapAccount: ClaudeSwapAccount? = nil,
         preferOrganizationScopedDesktop: Bool = false,
+        configDirectory: String? = nil,
+        profileConfigDirectories: [String] = [],
         now: @escaping @Sendable () -> Date = Date.init
     ) {
+        self.configDirectory = configDirectory
+        self.profileConfigDirectories = profileConfigDirectories
         self.environment = environment
         self.files = files
         self.keychain = keychain
@@ -165,8 +171,30 @@ struct ClaudeAuthStore: Sendable {
             stored = stored.filter { liveUsageAvailability($0) == .available }
                 + stored.filter { liveUsageAvailability($0) != .available }
         }
-        let candidates = desktopOnly || swapAccount != nil ? stored : applyingEnvironmentToken(to: stored)
+        var candidates = desktopOnly || swapAccount != nil || configDirectory != nil
+            ? stored : applyingEnvironmentToken(to: stored)
+        candidates.insert(
+            contentsOf: mergedProfileCandidates(),
+            at: candidates.firstIndex { $0.source == .environment } ?? candidates.count
+        )
         return ClaudeCredentialLoad(candidates: candidates, desktopStatus: desktopStatus)
+    }
+
+    private func mergedProfileCandidates() -> [ClaudeCredentialState] {
+        func standardized(_ path: String) -> String {
+            URL(fileURLWithPath: (path as NSString).expandingTildeInPath).standardizedFileURL.path.trimmingTrailingSlashes
+        }
+        var seen: Set<String> = [standardized(claudeHomeOverride() ?? Self.defaultClaudeHome)]
+        return profileConfigDirectories.filter { seen.insert(standardized($0)).inserted }.flatMap { directory in
+            let profile = ClaudeAuthStore(
+                environment: environment, files: files, keychain: keychain, configDirectory: directory, now: now
+            )
+            return profile.orderedStoredCandidates().map { state in
+                var state = state
+                if state.source == .file { state.source = .accountFile(path: profile.credentialsPath()) }
+                return state
+            }
+        }
     }
 
     func loadCredentialCandidates() -> [ClaudeCredentialState] {
@@ -271,7 +299,7 @@ struct ClaudeAuthStore: Sendable {
     }
 
     func claudeHomeOverride() -> String? {
-        swapAccount?.sessionDirectory ?? envText("CLAUDE_CONFIG_DIR")
+        swapAccount?.sessionDirectory ?? configDirectory ?? envText("CLAUDE_CONFIG_DIR")
     }
 
     // Resolved OAuth endpoint strings before URL validation. The suffix is derived from the same
@@ -343,7 +371,7 @@ struct ClaudeAuthStore: Sendable {
         let base = "\(Self.keychainServicePrefix)\(resolveOAuthEndpoints().suffix)-credentials"
         if let configDir = claudeHomeOverride() {
             let scoped = "\(base)-\(hashSuffix(configDir))"
-            return swapAccount == nil ? [scoped, base] : [scoped]
+            return swapAccount == nil && configDirectory == nil ? [scoped, base] : [scoped]
         }
         return [base]
     }

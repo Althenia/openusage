@@ -12,6 +12,21 @@ Settings lives inside the popover — there is no separate window. Open it from 
 
 **Upgrading from the legacy (pre-0.7) edition:** the old edition managed start-on-login with its own launcher file, which an in-place update left behind. That leftover could start the app a second time at every login and showed up in System Settings → Login Items under the signing company's name ("SUNSTORY LLC") instead of OpenUsage. The app now removes it automatically on launch — only when the file verifiably points at OpenUsage itself — so login starts exactly one copy, controlled by the Launch at Login toggle above.
 
+## Profiles
+
+Profiles show extra Claude and Codex logins as their own cards. Each profile has a name and a
+folder: a Claude config folder (what `CLAUDE_CONFIG_DIR` would point to) or a Codex home (what
+`CODEX_HOME` would point to). In the **Add Profile** row, pick Claude or Codex from **Choose
+Provider**, enter a name, choose the folder with **Choose Folder…** (hidden folders are shown), and
+save. Each profile row has buttons to choose a different folder, rename the profile, or remove it.
+
+A name can't be empty, and each provider's profile names must be different. The folder must exist.
+Profile changes take effect the next time OpenUsage starts. Until then, Settings shows a reminder
+with a restart button that quits OpenUsage and opens it again with the new profiles. If it can't
+restart itself, it says so; quit and reopen OpenUsage instead. Profiles stay on this Mac: they aren't synced through iCloud, and Reset All Settings keeps
+them. See [Claude](providers/claude.md#profiles) and [Codex](providers/codex.md#profiles) for how
+profile cards get their limits and spending.
+
 ## iCloud Sync
 
 **Sync Across Macs** is off by default. Turning it on shares normalized OpenUsage history through the
@@ -73,7 +88,7 @@ See [Logging](logging.md) for the full behavior: subsystem tags, the file size c
 
 **Reset All Settings…** restores every setting on this screen to its default — appearance, usage display, notifications, privacy, log level, the global shortcut (cleared), Launch at Login (turned off), iCloud sync (turned off), and the update preferences (stable channel, automatic checks on) — and also resets all customization, exactly like Customize's Reset All: default layout, order, and menu-bar stars, with providers turned back on for the tools you have installed. The reset cannot be undone.
 
-Not touched: provider logins and API keys, cached usage data, and your extra-analytics choice. Turning iCloud sync off as part of the reset works exactly like flipping its toggle off: this Mac's synced history is removed from the shared iCloud data, and your other Macs keep their own.
+Not touched: provider logins and API keys, profiles, cached usage data, and your extra-analytics choice. Turning iCloud sync off as part of the reset works exactly like flipping its toggle off: this Mac's synced history is removed from the shared iCloud data, and your other Macs keep their own.
 
 ## Updates
 

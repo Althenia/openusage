@@ -73,6 +73,25 @@ Saving a refreshed Claude Code token updates only its access token, refresh toke
 latest credential document. MCP logins and other Claude Code fields are preserved, including changes
 made while OpenUsage was refreshing.
 
+## Profiles
+
+Add a profile in **Settings → Profiles** to show another Claude config folder (the folder
+`CLAUDE_CONFIG_DIR` would point to) as its own card, labeled with the profile's name, such as
+"Claude: Work". The card reads that folder's own login (its Keychain entry and `.credentials.json`)
+and never falls back to your default login or an environment token. It renews the folder's token
+and saves it back there, just as Claude Code would. Its spending comes from the folder's
+`projects/` logs, plus any other sessions that record the profile's organization.
+
+A profile only shows up once its folder holds a signed-in login. If it is signed in to an account
+OpenUsage already shows, it doesn't add a second card: the profile names that card and adds its
+folder's spending and login to it. The card tries its own login first, then each matching profile's
+login in the order the profiles were added. So if the default login has expired, a working profile
+login still supplies the limits, and its renewed token is saved back to the profile folder. Every
+login must still belong to the card's account and organization. When two profiles sign in to the
+same account, the first one's name is used.
+Profile changes, including a new folder, apply after a restart; Settings → Profiles has a restart
+button for this.
+
 ## Claude Swap accounts
 
 OpenUsage discovers the saved accounts in Claude Swap's `~/.claude-swap-backup/sequence.json`

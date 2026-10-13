@@ -70,6 +70,21 @@ changed mid-refresh is left untouched (a renewed token that could not be saved s
 refresh), and each card tries every matching login. If a read-only login has expired, use that
 account once in xswap or pi so the tool renews its own token, then refresh OpenUsage.
 
+### Profiles
+
+Add a profile in **Settings → Profiles** to show another Codex home (the folder `CODEX_HOME` would
+point to) as its own card, labeled with the profile's name, such as "Codex: Personal". The home
+needs a signed-in `auth.json`; Keychain-only logins in other homes aren't read. A profile's card
+appears even when it is your only Codex account. Its live limits come from that home's login, and
+its spending from that home's session logs. OpenUsage renews the token and saves it back to the
+home, unless xswap manages that home.
+
+If the profile is signed in to an account OpenUsage already found, it names that card instead of
+adding a second one. A profile name takes priority over xswap and pi names, and when two profiles
+sign in to the same account, the first one's name is used.
+Profile changes, including a new folder, apply after a restart; Settings → Profiles has a restart
+button for this.
+
 ### Whose spending goes on which card
 
 Codex session logs don't say which account ran them, so OpenUsage goes by folder: each Codex home's

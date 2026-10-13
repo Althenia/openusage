@@ -4,12 +4,16 @@ struct ClaudeAccountCard: Equatable, Sendable {
     let id: String
     let identityKey: String
     let organizationID: String?
-    let displayName: String
+    var displayName: String
     let usesDesktopCredentials: Bool
     let allowsUnattributedPiUsage: Bool
     var swapAccount: ClaudeSwapAccount? = nil
     var additionalLogDirectories: [String] = []
     var organizationName: String? = nil
+    var profileName: String? = nil
+    var configDirectory: String? = nil
+    var ownedLogDirectories: [String] = []
+    var mergedProfileDirectories: [String] = []
 }
 
 /// The launch-time account pass: read which account is signed in at each family's default home,
@@ -54,7 +58,8 @@ struct ProviderAccountAssembly {
         return await make(
             observer: DefaultAccountObserver(),
             accountsStore: ProviderAccountsStore(defaults: defaults),
-            families: families
+            families: families,
+            profiles: ProviderProfilesStore.load(from: defaults)
         )
     }
 
@@ -87,11 +92,12 @@ struct ProviderAccountAssembly {
                 else { return nil }
                 return url.lastPathComponent
             }
-        }
+        },
+        profiles: [ProviderProfile] = []
     ) async -> ProviderAccountAssembly {
         let codex = families.contains("codex")
             ? await makeCodexCards(observer: observer, accountsStore: accountsStore,
-                                   listDirectories: listCodexHomeDirectories)
+                                   listDirectories: listCodexHomeDirectories, profiles: profiles)
             : CodexAccountDiscovery()
         let codexCards = codex.cards
         var identityKeys = Dictionary(uniqueKeysWithValues: codexCards.map { ($0.id, $0.identity.key) })
@@ -127,24 +133,38 @@ struct ProviderAccountAssembly {
             return ProviderAccountAssembly(identityKeysByCard: identityKeys, codex: codex)
         }
 
+        func observeClaude(_ identityKey: String, label: String?, source: ProviderAccountSource) {
+            if let index = observations.firstIndex(where: {
+                $0.family == "claude" && $0.identityKey == identityKey
+            }) {
+                observations[index].sources.append(source)
+            } else {
+                observations.append(ProviderAccountsStore.Observation(
+                    family: "claude", identityKey: identityKey, label: label, sources: [source]
+                ))
+            }
+        }
+
         let swapAccounts = ClaudeSwapAccount.discover(files: observer.files, home: observer.homeDirectory())
         if !swapAccounts.isEmpty {
             AppLog.info(.config, "accounts: discovered \(swapAccounts.count) Claude Swap accounts")
         }
         for account in swapAccounts {
-            let source = ProviderAccountSource(kind: .claudeSwap, anchor: account.sessionDirectory, holdsDefaultSource: false)
-            if let index = observations.firstIndex(where: {
-                $0.family == "claude" && $0.identityKey == account.identityKey
-            }) {
-                observations[index].sources.append(source)
-            } else {
-                observations.append(ProviderAccountsStore.Observation(
-                    family: "claude", identityKey: account.identityKey, label: "\(account.email) (\(account.organizationName ?? "Organization \(account.organizationID.prefix(8))"))", sources: [source]
-                ))
-            }
+            observeClaude(
+                account.identityKey,
+                label: "\(account.email) (\(account.organizationName ?? "Organization \(account.organizationID.prefix(8))"))",
+                source: ProviderAccountSource(kind: .claudeSwap, anchor: account.sessionDirectory, holdsDefaultSource: false)
+            )
+        }
+        let profileLogins = observeClaudeProfiles(profiles, observer: observer)
+        for login in profileLogins {
+            observeClaude(login.identityKey, label: login.label, source: ProviderAccountSource(
+                kind: .defaultHome, anchor: login.profile.directory, holdsDefaultSource: false
+            ))
         }
 
-        if let claudeIdentity = identityKeys["claude"], !claudeIdentity.contains("|"), swapAccounts.isEmpty {
+        if let claudeIdentity = identityKeys["claude"], !claudeIdentity.contains("|"),
+           swapAccounts.isEmpty, profileLogins.isEmpty {
             accountsStore.reconcile(with: observations)
             return ProviderAccountAssembly(identityKeysByCard: identityKeys, codex: codex)
         }
@@ -160,19 +180,9 @@ struct ProviderAccountAssembly {
         let desktopAnchor = desktop.homeDirectory()
             .appendingPathComponent("Library/Application Support/Claude").path
         for organization in desktopOrganizations {
-            let source = ProviderAccountSource(
+            observeClaude(organization.identityKey, label: organization.label, source: ProviderAccountSource(
                 kind: .defaultHome, anchor: desktopAnchor, holdsDefaultSource: false
-            )
-            if let index = observations.firstIndex(where: {
-                $0.family == "claude" && $0.identityKey == organization.identityKey
-            }) {
-                observations[index].sources.append(source)
-            } else {
-                observations.append(ProviderAccountsStore.Observation(
-                    family: "claude", identityKey: organization.identityKey,
-                    label: organization.label, sources: [source]
-                ))
-            }
+            ))
         }
 
         let defaultClaudeIdentity = identityKeys["claude"]
@@ -248,6 +258,8 @@ struct ProviderAccountAssembly {
             ))
             identityKeys[record.id] = account.identityKey
         }
+        applyClaudeProfiles(profileLogins, to: &cards, records: records,
+                            allowsUnattributedPiUsage: allowsUnattributedPiUsage, identityKeys: &identityKeys)
         for index in cards.indices {
             cards[index].additionalLogDirectories = swapAccounts.map(\.sessionDirectory)
         }

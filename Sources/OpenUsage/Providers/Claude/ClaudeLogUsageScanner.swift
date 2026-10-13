@@ -29,6 +29,7 @@ actor ClaudeLogUsageScanner {
     private let organizationID: String?
     private let accountID: String?
     private let additionalConfigDirectories: [String]
+    private let ownedConfigDirectories: [String]
     private let allowsUnattributedSessions: Bool
     /// The identity Claude Code is signed in to right now, re-read every scan. The card matching it
     /// also owns the default home's sessions that record no account, which is how plain terminal
@@ -78,6 +79,7 @@ actor ClaudeLogUsageScanner {
         allowsUnattributedSessions: Bool = false,
         currentDefaultLoginIdentity: (@Sendable () -> String?)? = nil,
         additionalConfigDirectories: [String] = [],
+        ownedConfigDirectories: [String] = [],
         readOwnershipData: @escaping @Sendable (URL) throws -> Data = {
             try Data(contentsOf: $0, options: .mappedIfSafe)
         }
@@ -90,6 +92,7 @@ actor ClaudeLogUsageScanner {
         self.organizationID = organizationUUID?.lowercased()
         self.accountID = accountUUID?.lowercased()
         self.additionalConfigDirectories = additionalConfigDirectories
+        self.ownedConfigDirectories = ownedConfigDirectories
         self.allowsUnattributedSessions = allowsUnattributedSessions
         self.currentDefaultLoginIdentity = currentDefaultLoginIdentity ?? {
             let observer = DefaultAccountObserver(environment: environment, homeDirectory: homeDirectory)
@@ -106,7 +109,8 @@ actor ClaudeLogUsageScanner {
         // A UUID-only login cannot claim any organization's history once multiple identities are
         // known; while it is the default login it still claims the default home's unattributed sessions.
         let claimsDefaultHome = !allowsUnattributedSessions && isCurrentDefaultLogin()
-        if accountID != nil, organizationID == nil, !allowsUnattributedSessions, !claimsDefaultHome {
+        if accountID != nil, organizationID == nil, !allowsUnattributedSessions, !claimsDefaultHome,
+           ownedConfigDirectories.isEmpty {
             AppLog.info(LogTag.plugin("claude"), "local spending excluded: login has no organization and multiple accounts are known")
             return nil
         }
@@ -121,7 +125,7 @@ actor ClaudeLogUsageScanner {
         }
 
         var files = Self.usageFiles(under: roots)
-        if organizationID != nil || claimsDefaultHome {
+        if organizationID != nil || claimsDefaultHome || !ownedConfigDirectories.isEmpty {
             files = ownedUsageFiles(files, claimsDefaultHome: claimsDefaultHome)
         }
         guard !Task.isCancelled else { return nil }
@@ -148,7 +152,8 @@ actor ClaudeLogUsageScanner {
     private func parseCacheIdentity() -> String {
         if let cacheIdentityOverride { return cacheIdentityOverride }
         let home = homeDirectory().resolvingSymlinksInPath().path
-        let allRoots = defaultConfigRoots() + additionalConfigDirectories.map { URL(fileURLWithPath: expandHome($0)) }
+        let allRoots = defaultConfigRoots()
+            + (additionalConfigDirectories + ownedConfigDirectories).map { URL(fileURLWithPath: expandHome($0)) }
         let roots = Set(allRoots.map { $0.resolvingSymlinksInPath().standardizedFileURL.path })
             .sorted()
             .joined(separator: "\n")
@@ -220,7 +225,7 @@ actor ClaudeLogUsageScanner {
             addIfValid(home.appendingPathComponent(".claude"))
         }
 
-        for directory in additionalConfigDirectories {
+        for directory in additionalConfigDirectories + ownedConfigDirectories {
             addIfValid(URL(fileURLWithPath: expandHome(directory)))
         }
 
@@ -293,9 +298,9 @@ actor ClaudeLogUsageScanner {
         var ownedFiles: [JSONLScanning.DiscoveredFile] = []
         var desktopSessionIDs: Set<String>?
         var allDesktopSessionIDs: Set<String>?
-        let defaultProjectPrefixes = claimsDefaultHome
-            ? defaultConfigRoots().map { $0.appendingPathComponent("projects").resolvingSymlinksInPath().path + "/" }
-            : []
+        let defaultProjectPrefixes = ((claimsDefaultHome ? defaultConfigRoots() : [])
+            + ownedConfigDirectories.map { URL(fileURLWithPath: expandHome($0)) })
+            .map { $0.appendingPathComponent("projects").resolvingSymlinksInPath().path + "/" }
         // Optional values retain read failures for this pass without persisting them.
         var identities: [String: ClaudeSessionIdentity?] = [:]
 

@@ -33,7 +33,8 @@ extension ProviderAccountAssembly {
     static func makeCodexCards(
         observer: DefaultAccountObserver,
         accountsStore: ProviderAccountsStore,
-        listDirectories: @escaping @Sendable (String) -> [String] = CodexHomeScanner.listSubdirectories
+        listDirectories: @escaping @Sendable (String) -> [String] = CodexHomeScanner.listSubdirectories,
+        profiles: [ProviderProfile] = []
     ) async -> CodexAccountDiscovery {
         let homeDirectory = observer.homeDirectory()
         let swaps = CodexSwapAccount.discover(
@@ -47,8 +48,9 @@ extension ProviderAccountAssembly {
             files: observer.files,
             homeDirectory: observer.homeDirectory,
             listDirectories: listDirectories
-        ).scan(additionalHomes: swaps.map(\.mainHome))
+        ).scan(additionalHomes: swaps.map(\.mainHome) + profiles.filter { $0.family == .codex }.map(\.directory))
         let homeLogins = homeScan.logins
+        let profileLabels = codexProfileLabels(profiles, logins: homeLogins, homeDirectory: homeDirectory)
         let piScan = PiCodexLoginScanner(
             environment: observer.environment, files: observer.files, homeDirectory: observer.homeDirectory
         ).scan()
@@ -69,7 +71,7 @@ extension ProviderAccountAssembly {
             homeLogins.map(\.identity) + piScan.logins.map(\.identity) + swaps.map(\.identity)
                 + [keychainIdentity].compactMap { $0 }
         )
-        guard !swaps.isEmpty || hasEstablishedAccounts || knownIdentities.count > 1 else {
+        guard !swaps.isEmpty || hasEstablishedAccounts || knownIdentities.count > 1 || !profileLabels.isEmpty else {
             let plainHomes = homeLogins.map(\.home).filter { !configuredHomes.contains($0) }
             return CodexAccountDiscovery(
                 plainAuthHomes: plainHomes,
@@ -164,7 +166,7 @@ extension ProviderAccountAssembly {
             let writableHomes = Set(matchingHomes.map { CodexHomeScanner.canonicalHome($0, homeDirectory: homeDirectory) })
                 .subtracting(managedHomes)
             return CodexAccountCard(id: record.id, identity: identity,
-                displayName: labels[identity.key] ?? "Codex",
+                displayName: profileLabels[identity.key] ?? labels[identity.key] ?? "Codex",
                 authHomes: Set(matchingHomes + matchingSwapHomes).sorted(),
                 writableAuthHomes: writableHomes.sorted(),
                 piCredentialSources: matchingPi, claimsPiUsage: piUsageOwner == identity)

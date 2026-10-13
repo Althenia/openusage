@@ -36,6 +36,9 @@ This Mac updates its file after a five-minute refresh batch, a manual refresh, o
 change. iCloud delivery is eventually consistent, so another Mac can take longer than five minutes to
 receive it, especially while offline. Downloaded changes reload immediately when macOS reports them.
 
+Profile cards sync their history like any other account card. The profiles themselves, their names
+and folders, stay on each Mac.
+
 Settings lists each valid device file with the time that Mac generated it. To remove a Mac from the
 combined summary, turn sync off on that Mac; this deletes its file from iCloud. Turning sync off also
 stops that Mac from reading peers and immediately returns every surface there to local-only spend.
