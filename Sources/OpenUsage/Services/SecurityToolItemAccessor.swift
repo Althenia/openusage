@@ -4,7 +4,7 @@ import Security
 /// Keychain access through `/usr/bin/security`, for logins whose own tools save them that way.
 ///
 /// Saving new data resets which apps may read an item without asking: only the app that saved it
-/// keeps access. Claude Code, gh, Cursor's agent, and Antigravity save through `security`, so
+/// keeps access. Claude Code, gh, Muse, Cursor's agent, and Antigravity save through `security`, so
 /// OpenUsage reads and saves those logins through it too. The user's Always Allow then survives
 /// every renewal, and OpenUsage's saves never lock those tools out of their own logins.
 struct SecurityToolItemAccessor: SecurityItemAccessing {
@@ -19,6 +19,7 @@ struct SecurityToolItemAccessor: SecurityItemAccessing {
             || service.hasSuffix(KeychainICloudDeviceIDStore.serviceSuffix)
             || [
                 CopilotAuthStore.ghKeychainService,
+                MuseAuthStore.keychainService,
                 CursorAuthStore.keychainAccessTokenService,
                 CursorAuthStore.keychainRefreshTokenService,
                 AntigravityAuthStore.keychainService,

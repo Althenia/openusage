@@ -19,6 +19,19 @@ final class LogRedactionTests: XCTestCase {
         XCTAssertEqual(LogRedaction.redactValue("abcdefghijklm"), "abcd...jklm")
     }
 
+    func testRedactsMuseBearerKeysInBodyAndLogMessages() {
+        for prefix in ["LLM|", "LLM_"] {
+            let key = "\(prefix)synthetic-key-for-tests-000000000000000000000000000000000000"
+            let body = LogRedaction.redactBody("{\"error\":\"Authorization: Bearer \(key)\"}")
+            let message = LogRedaction.redactLogMessage("Authorization: Bearer \(key)")
+
+            XCTAssertFalse(body.contains(key), body)
+            XCTAssertFalse(message.contains(key), message)
+            XCTAssertTrue(body.contains("\(prefix)...0000"), body)
+            XCTAssertTrue(message.contains("\(prefix)...0000"), message)
+        }
+    }
+
     // MARK: - redactURL
 
     func testRedactURLSensitiveParamsOnly() {

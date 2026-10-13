@@ -192,6 +192,28 @@ extension OllamaUsageError: CategorizedError {
     }
 }
 
+extension MuseAuthError: CategorizedError {
+    var errorCategory: ErrorCategory {
+        switch self {
+        case .notLoggedIn: .notLoggedIn
+        case .credentialsUnreadable: .credentialAccess
+        case .invalidCredentials: .authInvalid
+        case .subscriptionInactive: .notAvailable
+        }
+    }
+}
+
+extension MuseUsageError: CategorizedError {
+    var errorCategory: ErrorCategory {
+        switch self {
+        case .connectionFailed: .network
+        case .requestFailed(let status): ErrorCategory.http(status)
+        case .unauthorized: .notLoggedIn
+        case .usageUnavailable: .notAvailable
+        }
+    }
+}
+
 extension OpenCodeUsageError: CategorizedError {
     var errorCategory: ErrorCategory {
         switch self {

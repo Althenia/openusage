@@ -132,8 +132,8 @@ enum LogRedaction {
     // MARK: - Compiled patterns (EXACT Rust patterns, compiled once)
 
     private static let jwtRegex = makeRegex(#"eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+"#)
-    private static let apiKeyQuotedRegex = makeRegex(#"["']?(sk-|pk-|api_|key_|secret_)[A-Za-z0-9_-]{12,}["']?"#)
-    private static let apiKeyBareRegex = makeRegex(#"(sk-|pk-|api_|key_|secret_)[A-Za-z0-9_-]{12,}"#)
+    private static let apiKeyQuotedRegex = makeRegex(#"["']?(sk-|pk-|api_|key_|secret_|LLM[|_])[A-Za-z0-9_-]{12,}["']?"#)
+    private static let apiKeyBareRegex = makeRegex(#"(sk-|pk-|api_|key_|secret_|LLM[|_])[A-Za-z0-9_-]{12,}"#)
     private static let devinRegex = makeRegex(#"devin-session-token\$[^\s"',}\]]+"#)
     private static let accountRegex = makeRegex(#"(account=)([^,\s]+)"#)
     private static let pathRegex = makeRegex(#"(/(?:Users|home|opt|private|var|tmp|Applications)/[^\s"')]+)"#)
