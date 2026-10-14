@@ -1,4 +1,5 @@
 import Foundation
+import Security
 import XCTest
 @testable import OpenUsage
 
@@ -21,46 +22,50 @@ private func museAuthFile(
     #"{"schema_version":2,"providers":{"meta":{"mechanism":"oauth","storage":"\#(storage)","obtained_via":"device_code","api_base_url":"\#(baseURL)","subs_active":\#(subscriptionActive)}}}"#
 }
 
-private final class MuseKeychain: KeychainAccessing, @unchecked Sendable {
+private let museSecret = #"{"secret_schema_version":1,"api_key":"LLM|synthetic-key-for-tests-000000000000000000000000000000000000"}"#
+
+private final class MuseKeychain: MuseKeychainReading, @unchecked Sendable {
     var value: String?
-    var reads = 0
-    var serviceOnlyReads = 0
-    var writes = 0
+    var status: OSStatus
+    var exists: Bool?
+    var interactionRequests: [Bool] = []
+    var existenceProbes = 0
+    var reads: Int { interactionRequests.count }
 
-    init(_ value: String? = #"{"secret_schema_version":1,"api_key":"LLM|synthetic-key-for-tests-000000000000000000000000000000000000"}"#) {
+    init(_ value: String? = museSecret, status: OSStatus? = nil, exists: Bool? = true) {
         self.value = value
+        self.status = status ?? (value == nil ? errSecItemNotFound : errSecSuccess)
+        self.exists = exists
     }
 
-    func readGenericPassword(service: String) throws -> String? {
-        serviceOnlyReads += 1
-        XCTFail("Muse credentials must select the verified Keychain account")
-        return nil
+    func readItem(allowInteraction: Bool) -> (status: OSStatus, data: Data?) {
+        interactionRequests.append(allowInteraction)
+        return (status, status == errSecSuccess ? value.map { Data($0.utf8) } : nil)
     }
 
-    func readGenericPassword(service: String, account: String) throws -> String? {
-        reads += 1
-        XCTAssertEqual(service, MuseAuthStore.keychainService)
-        XCTAssertEqual(account, MuseAuthStore.keychainAccount)
-        return value
-    }
-
-    func writeGenericPassword(service: String, value: String) throws {
-        writes += 1
-        XCTFail("Muse must never write to Keychain")
-    }
-
-    func writeGenericPassword(service: String, account: String, value: String) throws {
-        writes += 1
-        XCTFail("Muse must never write to Keychain")
+    func itemExists() -> Bool? {
+        existenceProbes += 1
+        return exists
     }
 }
 
 private struct MuseHTTPClient: HTTPClient {
-    let statusCode: Int
+    let statusCodes: [Int]
     let body: Data
     let recorder: MuseRequestRecorder
 
+    init(statusCode: Int, body: Data, recorder: MuseRequestRecorder) {
+        self.init(statusCodes: [statusCode], body: body, recorder: recorder)
+    }
+
+    init(statusCodes: [Int], body: Data, recorder: MuseRequestRecorder) {
+        self.statusCodes = statusCodes
+        self.body = body
+        self.recorder = recorder
+    }
+
     func send(_ request: HTTPRequest) async throws -> HTTPResponse {
+        let statusCode = statusCodes[min(recorder.requests.count, statusCodes.count - 1)]
         recorder.requests.append(request)
         return HTTPResponse(statusCode: statusCode, headers: ["content-type": "text/event-stream"], body: body)
     }
@@ -126,7 +131,7 @@ final class MuseProviderTests: XCTestCase {
         }
     }
 
-    func testReadsOnlyTheConfiguredAuthFileAndAccountScopedKeychainSecret() throws {
+    func testReadsTheConfiguredAuthFileAndKeychainSecret() throws {
         let files = FakeFiles(["/custom/muse-auth.json": museAuthFile()])
         let keychain = MuseKeychain()
         let store = museAuthStore(
@@ -135,12 +140,12 @@ final class MuseProviderTests: XCTestCase {
             environment: FakeEnvironment(["MUSE_AUTH_PATH": "/custom/muse-auth.json"])
         )
 
-        let credentials = try XCTUnwrap(store.loadCredentials())
+        let apiBaseURL = try XCTUnwrap(store.loadAPIBaseURL())
+        let apiKey = try store.readAPIKey(allowInteraction: false)
 
-        XCTAssertEqual(credentials.apiBaseURL.absoluteString, "https://api.meta.ai/v1")
-        XCTAssertEqual(keychain.reads, 1)
-        XCTAssertEqual(keychain.serviceOnlyReads, 0)
-        XCTAssertEqual(keychain.writes, 0)
+        XCTAssertEqual(apiBaseURL.absoluteString, "https://api.meta.ai/v1")
+        XCTAssertEqual(apiKey, "LLM|synthetic-key-for-tests-000000000000000000000000000000000000")
+        XCTAssertEqual(keychain.interactionRequests, [false])
         XCTAssertEqual(files.files.count, 1)
     }
 
@@ -151,7 +156,7 @@ final class MuseProviderTests: XCTestCase {
             keychain: MuseKeychain(),
             environment: FakeEnvironment(["XDG_CONFIG_HOME": "/xdg"])
         )
-        XCTAssertNotNil(try xdgStore.loadCredentials())
+        XCTAssertNotNil(try xdgStore.loadAPIBaseURL())
 
         let defaultFiles = FakeFiles(["~/.config/muse/auth.json": museAuthFile()])
         let defaultStore = MuseAuthStore(
@@ -159,7 +164,140 @@ final class MuseProviderTests: XCTestCase {
             keychain: MuseKeychain(),
             environment: FakeEnvironment()
         )
-        XCTAssertNotNil(try defaultStore.loadCredentials())
+        XCTAssertNotNil(try defaultStore.loadAPIBaseURL())
+    }
+
+    func testBackgroundRefreshReadsKeychainWithoutAllowingAPopup() async {
+        let keychain = MuseKeychain()
+        let provider = MuseProvider(
+            authStore: museAuthStore(keychain: keychain),
+            usageClient: MuseUsageClient(http: MuseHTTPClient(statusCode: 200, body: museData(museSSE), recorder: MuseRequestRecorder()))
+        )
+
+        let snapshot = await provider.refresh()
+
+        XCTAssertEqual(snapshot.lines.map(\.label), ["Session", "Weekly"])
+        XCTAssertEqual(keychain.interactionRequests, [false])
+    }
+
+    func testManualRefreshMayAskForKeychainAccess() async {
+        let keychain = MuseKeychain()
+        let provider = MuseProvider(
+            authStore: museAuthStore(keychain: keychain),
+            usageClient: MuseUsageClient(http: MuseHTTPClient(statusCode: 200, body: museData(museSSE), recorder: MuseRequestRecorder()))
+        )
+
+        let snapshot = await ProviderRefreshContext.$isManual.withValue(true) {
+            await provider.refresh()
+        }
+
+        XCTAssertEqual(snapshot.lines.map(\.label), ["Session", "Weekly"])
+        XCTAssertEqual(keychain.interactionRequests, [true])
+    }
+
+    func testKeychainAccessNotGrantedAsksForAManualRefreshWithoutARequest() async {
+        for status in [errSecInteractionNotAllowed, errSecAuthFailed, errSecUserCanceled] {
+            let recorder = MuseRequestRecorder()
+            let provider = MuseProvider(
+                authStore: museAuthStore(keychain: MuseKeychain(status: status)),
+                usageClient: MuseUsageClient(http: MuseHTTPClient(statusCode: 200, body: museData(museSSE), recorder: recorder))
+            )
+
+            let snapshot = await provider.refresh()
+
+            XCTAssertEqual(snapshot.errorCategory, .credentialAccess, "status \(status)")
+            XCTAssertEqual(
+                errorMessage(snapshot),
+                "Muse login found. Refresh once and choose Always Allow to connect it.",
+                "status \(status)"
+            )
+            XCTAssertTrue(recorder.requests.isEmpty, "status \(status)")
+        }
+    }
+
+    func testUnexpectedKeychainFailureIsCredentialsUnreadable() async {
+        let provider = MuseProvider(
+            authStore: museAuthStore(keychain: MuseKeychain(status: errSecInternalComponent)),
+            usageClient: MuseUsageClient(http: MuseHTTPClient(statusCode: 200, body: museData(museSSE), recorder: MuseRequestRecorder()))
+        )
+
+        let snapshot = await provider.refresh()
+
+        XCTAssertEqual(snapshot.errorCategory, .credentialAccess)
+        XCTAssertEqual(
+            errorMessage(snapshot),
+            "Couldn't read Muse credentials. Check the Muse auth file and macOS Keychain access."
+        )
+    }
+
+    func testCredentialProbeNeverReadsTheKeychainSecret() async {
+        let cases: [(files: FakeFiles, exists: Bool?, expected: Bool, probes: Int)] = [
+            (FakeFiles(["~/.config/muse/auth.json": museAuthFile()]), true, true, 1),
+            (FakeFiles(["~/.config/muse/auth.json": museAuthFile()]), false, false, 1),
+            (FakeFiles(["~/.config/muse/auth.json": museAuthFile()]), nil, false, 1),
+            (FakeFiles(["~/.config/muse/auth.json": museAuthFile(subscriptionActive: false)]), true, false, 0),
+            (FakeFiles(), true, false, 0)
+        ]
+        for (index, testCase) in cases.enumerated() {
+            let keychain = MuseKeychain(exists: testCase.exists)
+            let provider = MuseProvider(authStore: museAuthStore(files: testCase.files, keychain: keychain))
+
+            let hasCredentials = await provider.hasLocalCredentials()
+
+            XCTAssertEqual(hasCredentials, testCase.expected, "case \(index)")
+            XCTAssertEqual(keychain.reads, 0, "case \(index)")
+            XCTAssertEqual(keychain.existenceProbes, testCase.probes, "case \(index)")
+        }
+    }
+
+    func testLaterRefreshesReuseTheKeyWithoutReadingKeychainAgain() async {
+        let recorder = MuseRequestRecorder()
+        let keychain = MuseKeychain()
+        let provider = MuseProvider(
+            authStore: museAuthStore(keychain: keychain),
+            usageClient: MuseUsageClient(http: MuseHTTPClient(statusCode: 200, body: museData(museSSE), recorder: recorder))
+        )
+
+        _ = await provider.refresh()
+        let snapshot = await provider.refresh()
+
+        XCTAssertEqual(snapshot.lines.map(\.label), ["Session", "Weekly"])
+        XCTAssertEqual(keychain.reads, 1)
+        XCTAssertEqual(recorder.requests.count, 2)
+    }
+
+    func testRejectedReusedKeyIsReadFromKeychainAgainAndRetriedOnce() async {
+        let recorder = MuseRequestRecorder()
+        let keychain = MuseKeychain()
+        let provider = MuseProvider(
+            authStore: museAuthStore(keychain: keychain),
+            usageClient: MuseUsageClient(http: MuseHTTPClient(statusCodes: [200, 401, 200], body: museData(museSSE), recorder: recorder))
+        )
+
+        _ = await provider.refresh()
+        let snapshot = await provider.refresh()
+
+        XCTAssertEqual(snapshot.lines.map(\.label), ["Session", "Weekly"])
+        XCTAssertEqual(keychain.interactionRequests, [false, false])
+        XCTAssertEqual(recorder.requests.count, 3)
+    }
+
+    func testLoggingOutDropsTheReusedKey() async {
+        let files = FakeFiles(["~/.config/muse/auth.json": museAuthFile()])
+        let keychain = MuseKeychain()
+        let provider = MuseProvider(
+            authStore: museAuthStore(files: files, keychain: keychain),
+            usageClient: MuseUsageClient(http: MuseHTTPClient(statusCode: 200, body: museData(museSSE), recorder: MuseRequestRecorder()))
+        )
+
+        _ = await provider.refresh()
+        files.files = [:]
+        let loggedOut = await provider.refresh()
+        files.files = ["~/.config/muse/auth.json": museAuthFile()]
+        _ = await provider.refresh()
+
+        XCTAssertEqual(loggedOut.errorCategory, .notLoggedIn)
+        XCTAssertEqual(keychain.reads, 2)
     }
 
     func testMissingAuthFileAndMissingKeychainCredentialAreNotLoggedIn() async {
@@ -203,10 +341,21 @@ final class MuseProviderTests: XCTestCase {
 
     func testUnauthorizedResponseRequestsMuseLoginAgain() async {
         for statusCode in [401, 403] {
-            let snapshot = await makeProvider(statusCode: statusCode, body: Data()).refresh()
+            let recorder = MuseRequestRecorder()
+            let keychain = MuseKeychain()
+            let provider = MuseProvider(
+                authStore: museAuthStore(keychain: keychain),
+                usageClient: MuseUsageClient(http: MuseHTTPClient(statusCode: statusCode, body: Data(), recorder: recorder))
+            )
+
+            let snapshot = await provider.refresh()
+            let retried = await provider.refresh()
 
             XCTAssertEqual(snapshot.errorCategory, .notLoggedIn, "HTTP \(statusCode)")
             XCTAssertEqual(errorMessage(snapshot), "Run muse login and try again.", "HTTP \(statusCode)")
+            XCTAssertEqual(retried.errorCategory, .notLoggedIn, "HTTP \(statusCode)")
+            XCTAssertEqual(keychain.reads, 2, "HTTP \(statusCode)")
+            XCTAssertEqual(recorder.requests.count, 2, "HTTP \(statusCode)")
         }
     }
 
@@ -262,7 +411,7 @@ final class MuseProviderTests: XCTestCase {
         let snapshot = await provider.refresh()
         XCTAssertEqual(snapshot.lines.map(\.label), ["Session", "Weekly"])
         XCTAssertEqual(recorder.requests.count, 1)
-        XCTAssertEqual(keychain.writes, 0)
+        XCTAssertEqual(keychain.reads, 1)
     }
 
     func testBothMetersAreEnabledAlwaysVisiblePinnedAndSessionComesFirst() {

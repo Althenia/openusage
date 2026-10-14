@@ -1,4 +1,6 @@
 import Foundation
+import LocalAuthentication
+import Security
 
 struct MuseCredentials: Sendable {
     let apiKey: String
@@ -7,6 +9,7 @@ struct MuseCredentials: Sendable {
 
 enum MuseAuthError: Error, LocalizedError, Equatable {
     case notLoggedIn
+    case keychainPermissionRequired
     case credentialsUnreadable
     case invalidCredentials
     case subscriptionInactive
@@ -15,6 +18,8 @@ enum MuseAuthError: Error, LocalizedError, Equatable {
         switch self {
         case .notLoggedIn:
             return "Run muse login and try again."
+        case .keychainPermissionRequired:
+            return "Muse login found. Refresh once and choose Always Allow to connect it."
         case .credentialsUnreadable:
             return "Couldn't read Muse credentials. Check the Muse auth file and macOS Keychain access."
         case .invalidCredentials:
@@ -25,17 +30,48 @@ enum MuseAuthError: Error, LocalizedError, Equatable {
     }
 }
 
+protocol MuseKeychainReading: Sendable {
+    func readItem(allowInteraction: Bool) -> (status: OSStatus, data: Data?)
+    func itemExists() -> Bool?
+}
+
+struct MuseKeychainReader: MuseKeychainReading {
+    func readItem(allowInteraction: Bool) -> (status: OSStatus, data: Data?) {
+        var query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: MuseAuthStore.keychainService,
+            kSecAttrAccount as String: MuseAuthStore.keychainAccount,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+            kSecReturnData as String: true
+        ]
+        if !allowInteraction {
+            let context = LAContext()
+            context.interactionNotAllowed = true
+            query[kSecUseAuthenticationContext as String] = context
+        }
+        return KeychainAccessGuard.read(service: MuseAuthStore.keychainService) {
+            var result: CFTypeRef?
+            let status = SecItemCopyMatching(query as CFDictionary, &result)
+            return (status, result as? Data)
+        }
+    }
+
+    func itemExists() -> Bool? {
+        SecurityKeychainAccessor().genericPasswordExists(service: MuseAuthStore.keychainService)
+    }
+}
+
 struct MuseAuthStore: Sendable {
     static let keychainService = "ai.meta.dev.credentials"
     static let keychainAccount = "meta"
 
     private let files: any TextFileAccessing
-    private let keychain: any KeychainAccessing
+    private let keychain: any MuseKeychainReading
     private let environment: any EnvironmentReading
 
     init(
         files: any TextFileAccessing = LocalTextFileAccessor(),
-        keychain: any KeychainAccessing = SecurityKeychainAccessor(),
+        keychain: any MuseKeychainReading = MuseKeychainReader(),
         environment: any EnvironmentReading = ProcessEnvironmentReader()
     ) {
         self.files = files
@@ -57,7 +93,7 @@ struct MuseAuthStore: Sendable {
         return "~/.config/muse/auth.json"
     }
 
-    func loadCredentials() throws -> MuseCredentials? {
+    func loadAPIBaseURL() throws -> URL? {
         let authText: String
         do {
             guard let text = try files.readTextIfPresent(authFilePath) else { return nil }
@@ -79,19 +115,24 @@ struct MuseAuthStore: Sendable {
             throw MuseAuthError.invalidCredentials
         }
         guard provider.subsActive != false else { throw MuseAuthError.subscriptionInactive }
+        return apiBaseURL
+    }
 
-        let raw: String?
-        do {
-            raw = try keychain.readGenericPassword(
-                service: Self.keychainService,
-                account: Self.keychainAccount
-            )
-        } catch {
-            AppLog.error(LogTag.auth("muse"), "Keychain credential read failed")
+    func readAPIKey(allowInteraction: Bool) throws -> String? {
+        let result = keychain.readItem(allowInteraction: allowInteraction)
+        switch result.status {
+        case errSecSuccess:
+            break
+        case errSecItemNotFound:
+            return nil
+        case errSecInteractionNotAllowed, errSecAuthFailed, errSecUserCanceled:
+            AppLog.warn(LogTag.auth("muse"), "Keychain access not granted (\(result.status))")
+            throw MuseAuthError.keychainPermissionRequired
+        default:
+            AppLog.error(LogTag.auth("muse"), "Keychain credential read failed (\(result.status))")
             throw MuseAuthError.credentialsUnreadable
         }
-        guard let raw else { return nil }
-        guard let secretData = raw.data(using: .utf8),
+        guard let secretData = result.data,
               let secret = try? JSONDecoder().decode(MuseKeychainSecret.self, from: secretData),
               secret.secretSchemaVersion == 1,
               let apiKey = secret.apiKey?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
@@ -99,7 +140,11 @@ struct MuseAuthStore: Sendable {
             AppLog.error(LogTag.auth("muse"), "Keychain credential is malformed")
             throw MuseAuthError.invalidCredentials
         }
-        return MuseCredentials(apiKey: apiKey, apiBaseURL: apiBaseURL)
+        return apiKey
+    }
+
+    func hasKeychainItem() -> Bool {
+        keychain.itemExists() == true
     }
 
     private static func validatedAPIBaseURL(_ string: String) -> URL? {

@@ -7,6 +7,7 @@ final class MuseProvider: ProviderRuntime {
     let authStore: MuseAuthStore
     let usageClient: MuseUsageClient
     let now: @Sendable () -> Date
+    private var cachedAPIKey: String?
 
     init(
         authStore: MuseAuthStore = MuseAuthStore(),
@@ -28,48 +29,68 @@ final class MuseProvider: ProviderRuntime {
     }
 
     func hasLocalCredentials() async -> Bool {
-        do {
-            guard try await loadOffMainActor({ [authStore] in
-                try authStore.loadCredentials()
-            }) != nil else { return false }
-            return true
-        } catch {
-            return false
+        await loadOffMainActor { [authStore] in
+            guard (try? authStore.loadAPIBaseURL()) != nil else { return false }
+            return authStore.hasKeychainItem()
         }
     }
 
     func refresh() async -> ProviderSnapshot {
-        let credentials: MuseCredentials
         do {
-            guard let loaded = try await loadOffMainActor({ [authStore] in
-                try authStore.loadCredentials()
-            }) else {
-                return ProviderSnapshot.error(provider: provider, error: MuseAuthError.notLoggedIn)
-            }
-            credentials = loaded
+            let lines = try await loadUsage(allowInteraction: ProviderRefreshContext.isManual)
+            return ProviderSnapshot.make(provider: provider, plan: nil, lines: lines, refreshedAt: now())
         } catch {
             return ProviderSnapshot.error(provider: provider, error: error)
         }
+    }
 
-        let response: HTTPResponse
+    private func loadUsage(allowInteraction: Bool) async throws -> [MetricLine] {
+        let apiBaseURL: URL?
         do {
-            response = try await usageClient.fetchUsage(credentials: credentials)
+            apiBaseURL = try await loadOffMainActor { [authStore] in try authStore.loadAPIBaseURL() }
         } catch {
-            return ProviderSnapshot.error(provider: provider, error: MuseUsageError.connectionFailed)
+            cachedAPIKey = nil
+            throw error
         }
-        if response.statusCode == 401 || response.statusCode == 403 {
-            return ProviderSnapshot.error(provider: provider, error: MuseUsageError.unauthorized)
-        }
-        guard (200..<300).contains(response.statusCode) else {
-            return ProviderSnapshot.error(provider: provider, error: MuseUsageError.requestFailed(response.statusCode))
+        guard let apiBaseURL else {
+            cachedAPIKey = nil
+            throw MuseAuthError.notLoggedIn
         }
 
+        if let cachedAPIKey {
+            let response = try await fetch(apiKey: cachedAPIKey, apiBaseURL: apiBaseURL)
+            if !ProviderAuthRetry.isAuthFailure(response) { return try Self.lines(from: response) }
+            self.cachedAPIKey = nil
+        }
+
+        guard let apiKey = try await loadOffMainActor({ [authStore] in
+            try authStore.readAPIKey(allowInteraction: allowInteraction)
+        }) else {
+            throw MuseAuthError.notLoggedIn
+        }
+        let response = try await fetch(apiKey: apiKey, apiBaseURL: apiBaseURL)
+        guard !ProviderAuthRetry.isAuthFailure(response) else { throw MuseUsageError.unauthorized }
+        cachedAPIKey = apiKey
+        return try Self.lines(from: response)
+    }
+
+    private func fetch(apiKey: String, apiBaseURL: URL) async throws -> HTTPResponse {
         do {
-            let lines = try MuseUsageMapper.map(eventStreamBody: response.body)
-            return ProviderSnapshot.make(provider: provider, plan: nil, lines: lines, refreshedAt: now())
+            return try await usageClient.fetchUsage(credentials: MuseCredentials(apiKey: apiKey, apiBaseURL: apiBaseURL))
+        } catch {
+            throw MuseUsageError.connectionFailed
+        }
+    }
+
+    private static func lines(from response: HTTPResponse) throws -> [MetricLine] {
+        guard (200..<300).contains(response.statusCode) else {
+            throw MuseUsageError.requestFailed(response.statusCode)
+        }
+        do {
+            return try MuseUsageMapper.map(eventStreamBody: response.body)
         } catch {
             AppLog.error(.refresh, "muse subscription usage response unavailable")
-            return ProviderSnapshot.error(provider: provider, error: MuseUsageError.usageUnavailable)
+            throw MuseUsageError.usageUnavailable
         }
     }
 }

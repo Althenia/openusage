@@ -196,7 +196,7 @@ extension MuseAuthError: CategorizedError {
     var errorCategory: ErrorCategory {
         switch self {
         case .notLoggedIn: .notLoggedIn
-        case .credentialsUnreadable: .credentialAccess
+        case .keychainPermissionRequired, .credentialsUnreadable: .credentialAccess
         case .invalidCredentials: .authInvalid
         case .subscriptionInactive: .notAvailable
         }

@@ -3,8 +3,8 @@ import XCTest
 @testable import OpenUsage
 
 final class SecurityToolItemAccessorTests: XCTestCase {
-    func testMuseKeychainServiceUsesTheSecurityToolPath() {
-        XCTAssertTrue(SecurityToolItemAccessor.handles(service: MuseAuthStore.keychainService))
+    func testMuseKeychainServiceIsReadInProcessNotThroughTheSecurityTool() {
+        XCTAssertFalse(SecurityToolItemAccessor.handles(service: MuseAuthStore.keychainService))
     }
 
     func testReadWaitsForThePopupInsteadOfClosingIt() {
