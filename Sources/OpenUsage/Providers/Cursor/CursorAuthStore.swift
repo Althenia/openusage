@@ -4,6 +4,9 @@ struct CursorAuthState: Hashable, Sendable {
     enum Source: Hashable, Sendable {
         case sqlite
         case keychain
+        /// YCoding's own Cursor login, read-only: no refresh token is carried and nothing is ever
+        /// written back — YCoding rotates the credential and each refresh re-reads it.
+        case ycoding
     }
 
     var accessToken: String?
@@ -15,6 +18,7 @@ enum CursorAuthError: Error, LocalizedError, Equatable {
     case notLoggedIn
     case sessionExpired
     case tokenExpired
+    case readOnlySource
 
     var errorDescription: String? {
         switch self {
@@ -24,6 +28,8 @@ enum CursorAuthError: Error, LocalizedError, Equatable {
             return "Session expired. Sign in via Cursor app or run `agent login`."
         case .tokenExpired:
             return "Token expired. Sign in via Cursor app or run `agent login`."
+        case .readOnlySource:
+            return "This Cursor login is managed by another app and can't be updated here."
         }
     }
 }
@@ -40,15 +46,18 @@ struct CursorAuthStore: Sendable {
     var sqlite: SQLiteAccessing
     var keychain: KeychainAccessing
     var now: @Sendable () -> Date
+    var ycodingCredentials: YCodingCredentialReader
 
     init(
         sqlite: SQLiteAccessing = SQLiteCLIAccessor(),
         keychain: KeychainAccessing = SecurityKeychainAccessor(),
-        now: @escaping @Sendable () -> Date = Date.init
+        now: @escaping @Sendable () -> Date = Date.init,
+        ycodingCredentials: YCodingCredentialReader? = nil
     ) {
         self.sqlite = sqlite
         self.keychain = keychain
         self.now = now
+        self.ycodingCredentials = ycodingCredentials ?? YCodingCredentialReader(sqlite: sqlite)
     }
 
     func loadAuthState() -> CursorAuthState? {
@@ -91,6 +100,14 @@ struct CursorAuthStore: Sendable {
             )
         }
 
+        do {
+            if let accessToken = try ycodingCredentials.oauthAccessToken(integration: "cursor") {
+                return CursorAuthState(accessToken: accessToken, refreshToken: nil, source: .ycoding)
+            }
+        } catch {
+            AppLog.error(LogTag.auth("cursor"), "YCoding credential database could not be read; YCoding fallback skipped")
+        }
+
         return nil
     }
 
@@ -109,6 +126,8 @@ struct CursorAuthStore: Sendable {
             try writeStateValue(Self.accessTokenKey, accessToken)
         case .keychain:
             try keychain.writeGenericPassword(service: Self.keychainAccessTokenService, value: accessToken)
+        case .ycoding:
+            throw CursorAuthError.readOnlySource
         }
     }
 

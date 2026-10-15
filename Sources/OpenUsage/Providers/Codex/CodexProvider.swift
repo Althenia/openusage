@@ -20,6 +20,7 @@ final class CodexProvider: ProviderRuntime {
     let logUsageScanner: CodexLogUsageScanner
     let piUsageScanner: PiUsageScanner
     let openCodeUsageScanner: OpenCodeCodexUsageScanner
+    let yCodingUsageScanner: YCodingUsageScanner
     let now: @Sendable () -> Date
     let pricing: @Sendable () async -> ModelPricing
     let fallbackModel: @MainActor () -> String?
@@ -32,6 +33,7 @@ final class CodexProvider: ProviderRuntime {
         logUsageScanner: CodexLogUsageScanner = CodexLogUsageScanner(),
         piUsageScanner: PiUsageScanner = .shared,
         openCodeUsageScanner: OpenCodeCodexUsageScanner = OpenCodeCodexUsageScanner(),
+        yCodingUsageScanner: YCodingUsageScanner = .shared,
         historyScope: CodexHistoryScope = .allHomes,
         now: @escaping @Sendable () -> Date = Date.init,
         pricing: @escaping @Sendable () async -> ModelPricing = { await ModelPricingStore.shared.current() },
@@ -45,6 +47,7 @@ final class CodexProvider: ProviderRuntime {
         self.logUsageScanner = logUsageScanner
         self.piUsageScanner = piUsageScanner
         self.openCodeUsageScanner = openCodeUsageScanner
+        self.yCodingUsageScanner = yCodingUsageScanner
         self.now = now
         self.pricing = pricing
         self.fallbackModel = fallbackModel
@@ -181,12 +184,13 @@ final class CodexProvider: ProviderRuntime {
         let piCardID = ProviderAccountID.family(of: provider.id)
         let history = await localHistory.value(wait: localHistoryWait) {
             [pricing, fallbackModel, historyScope, authStore, logUsageScanner, piUsageScanner,
-             openCodeUsageScanner, now] in
+             openCodeUsageScanner, yCodingUsageScanner, now] in
             let claims = await Self.historyClaims(scope: historyScope, authStore: authStore,
                                                   logUsageScanner: logUsageScanner)
             return await Self.scanLocalHistory(
                 claims: claims, claimsPiUsage: historyScope.claimsPiUsage, piCardID: piCardID, pricing: pricing, fallbackModel: fallbackModel, logUsageScanner: logUsageScanner,
-                piUsageScanner: piUsageScanner, openCodeUsageScanner: openCodeUsageScanner, now: now
+                piUsageScanner: piUsageScanner, openCodeUsageScanner: openCodeUsageScanner,
+                yCodingUsageScanner: yCodingUsageScanner, now: now
             )
         }
         if let history, let usage = history.usageHistory {
@@ -239,11 +243,12 @@ final class CodexProvider: ProviderRuntime {
         logUsageScanner: CodexLogUsageScanner,
         piUsageScanner: PiUsageScanner,
         openCodeUsageScanner: OpenCodeCodexUsageScanner,
+        yCodingUsageScanner: YCodingUsageScanner,
         now: @Sendable () -> Date
     ) async -> CodexLocalHistory {
         let pricing = await pricing()
-        // Three independent local sources: reading rollout files, pi's JSONL, and OpenCode's SQLite
-        // concurrently keeps the slowest one — not their sum — on the background scan's path.
+        // Independent local sources: reading rollout files, pi's JSONL, and OpenCode's and YCoding's
+        // SQLite concurrently keeps the slowest one — not their sum — on the background scan's path.
         let selectedFallbackModel = fallbackModel()
         async let native = logUsageScanner.scan(
             homes: claims.logHomes, now: now(), pricing: pricing, fallbackModel: selectedFallbackModel
@@ -253,12 +258,19 @@ final class CodexProvider: ProviderRuntime {
             estimateCost: { CodexUsagePricing.estimatedCost(pricing: pricing, model: $0, tokens: $1, at: $2) }
         ) : nil
         async let openCode = claims.ownsDefaultLogin ? openCodeUsageScanner.scan(now: now(), pricing: pricing) : nil
-        let (nativeScan, piScan, openCodeScan) = await (native, pi, openCode)
-        let baseNote = Self.localUsageSourceNote(hasPi: piScan != nil, hasOpenCode: openCodeScan != nil)
+        // YCoding rows name a provider family, not an account, so they follow the same single
+        // claimant as pi usage instead of counting on every account card.
+        async let yCoding = claimsPiUsage ? yCodingUsageScanner.scan(
+            cardID: piCardID, now: now(), pricing: pricing
+        ) : nil
+        let (nativeScan, piScan, openCodeScan, yCodingScan) = await (native, pi, openCode, yCoding)
+        let baseNote = Self.localUsageSourceNote(
+            hasPi: piScan != nil, hasOpenCode: openCodeScan != nil, hasYCoding: yCodingScan != nil
+        )
         var usageHistory: ProviderUsageHistory?
         // Cancellation must not publish a partial combined history.
         if !Task.isCancelled {
-            if let scan = DailyUsageAccumulator.merged([nativeScan, piScan, openCodeScan]) {
+            if let scan = DailyUsageAccumulator.merged([nativeScan, piScan, openCodeScan, yCodingScan]) {
                 usageHistory = ProviderUsageHistory(
                     series: scan.series, modelUsage: scan.modelUsage,
                     unknownModelsByDay: scan.unknownModelsByDay,
@@ -276,10 +288,11 @@ final class CodexProvider: ProviderRuntime {
         return CodexLocalHistory(sourceNote: baseNote, usageHistory: usageHistory)
     }
 
-    private static func localUsageSourceNote(hasPi: Bool, hasOpenCode: Bool) -> String {
+    private static func localUsageSourceNote(hasPi: Bool, hasOpenCode: Bool, hasYCoding: Bool) -> String {
         var sources = ["Codex logs"]
         if hasPi { sources.append("pi") }
         if hasOpenCode { sources.append("OpenCode") }
+        if hasYCoding { sources.append("YCoding") }
         let joined = sources.count > 2
             ? sources.dropLast().joined(separator: ", ") + ", and " + sources[sources.count - 1]
             : sources.joined(separator: " and ")
@@ -340,6 +353,8 @@ final class CodexProvider: ProviderRuntime {
             return await loadOffMainActor { [authStore] in authStore.loadKeychainAuth(account: account) }
         case .pi(let source):
             return authStore.loadPiAuth(source)
+        case .ycoding(let source):
+            return authStore.loadYCodingAuth(source)
         }
     }
 

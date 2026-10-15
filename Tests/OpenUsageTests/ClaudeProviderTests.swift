@@ -324,7 +324,7 @@ final class ClaudeProviderTests: XCTestCase {
                 "/tmp/claude/.credentials.json": #"{"claudeAiOauth":{"accessToken":"token","subscriptionType":"pro","scopes":["user:profile"]}}"#
             ]), now: { now }),
             usageClient: ClaudeUsageClient(httpClient: httpClient),
-            logUsageScanner: ClaudeLogFixture.scanner(home: home),
+            logUsageScanner: ClaudeLogFixture.scanner(home: home), yCodingUsageScanner: .isolated,
             now: { now },
             pricing: { TestPricing.bundled }
         )
@@ -359,7 +359,7 @@ final class ClaudeProviderTests: XCTestCase {
                 now: { now }
             ),
             usageClient: ClaudeUsageClient(httpClient: httpClient),
-            logUsageScanner: ClaudeLogFixture.scanner(home: home),
+            logUsageScanner: ClaudeLogFixture.scanner(home: home), yCodingUsageScanner: .isolated,
             now: { now },
             pricing: { TestPricing.bundled }
         )
@@ -404,7 +404,7 @@ final class ClaudeProviderTests: XCTestCase {
                     keychain: FakeKeychain(),
                     now: { now }
                 ),
-                logUsageScanner: ClaudeLogFixture.scanner(home: home),
+                logUsageScanner: ClaudeLogFixture.scanner(home: home), yCodingUsageScanner: .isolated,
                 now: { now },
                 pricing: { TestPricing.bundled }
             )
@@ -444,7 +444,7 @@ final class ClaudeProviderTests: XCTestCase {
                 "/tmp/claude/.credentials.json": #"{"claudeAiOauth":{"accessToken":"token","subscriptionType":"max","rateLimitTier":"default_claude_max_5x","scopes":["user:inference"]}}"#
             ]), now: { now }),
             usageClient: ClaudeUsageClient(httpClient: httpClient),
-            logUsageScanner: ClaudeLogFixture.scanner(home: home),
+            logUsageScanner: ClaudeLogFixture.scanner(home: home), yCodingUsageScanner: .isolated,
             now: { now },
             pricing: { TestPricing.bundled }
         )
@@ -521,7 +521,7 @@ final class ClaudeProviderTests: XCTestCase {
         let provider = ClaudeProvider(
             authStore: configuredAuthStore(files: files, now: { now }),
             usageClient: ClaudeUsageClient(httpClient: httpClient),
-            logUsageScanner: ClaudeLogFixture.scanner(home: nil),
+            logUsageScanner: ClaudeLogFixture.scanner(home: nil), yCodingUsageScanner: .isolated,
             now: { now },
             pricing: { TestPricing.bundled }
         )
@@ -571,7 +571,7 @@ final class ClaudeProviderTests: XCTestCase {
         let provider = ClaudeProvider(
             authStore: authStore,
             usageClient: ClaudeUsageClient(httpClient: httpClient),
-            logUsageScanner: ClaudeLogFixture.scanner(home: nil),
+            logUsageScanner: ClaudeLogFixture.scanner(home: nil), yCodingUsageScanner: .isolated,
             now: { now },
             pricing: { TestPricing.bundled }
         )
@@ -617,7 +617,7 @@ final class ClaudeProviderTests: XCTestCase {
         }
         let provider = ClaudeProvider(
             authStore: authStore, usageClient: ClaudeUsageClient(httpClient: httpClient),
-            logUsageScanner: ClaudeLogFixture.scanner(home: nil), pricing: { TestPricing.bundled }
+            logUsageScanner: ClaudeLogFixture.scanner(home: nil), yCodingUsageScanner: .isolated, pricing: { TestPricing.bundled }
         )
 
         let first = await provider.refresh()
@@ -654,7 +654,7 @@ final class ClaudeProviderTests: XCTestCase {
         let provider = ClaudeProvider(
             authStore: authStore,
             usageClient: ClaudeUsageClient(httpClient: httpClient),
-            logUsageScanner: ClaudeLogFixture.scanner(home: nil),
+            logUsageScanner: ClaudeLogFixture.scanner(home: nil), yCodingUsageScanner: .isolated,
             now: { now },
             pricing: { TestPricing.bundled }
         )
@@ -673,7 +673,7 @@ final class ClaudeProviderTests: XCTestCase {
                     keychain: FakeKeychain()
                 ),
                 usageClient: ClaudeUsageClient(httpClient: FakeHTTPClient(response: HTTPResponse(statusCode: 200, headers: [:], body: Data()))),
-                logUsageScanner: ClaudeLogFixture.scanner(home: nil),
+                logUsageScanner: ClaudeLogFixture.scanner(home: nil), yCodingUsageScanner: .isolated,
                 pricing: { TestPricing.bundled }
             )
         }
@@ -700,7 +700,7 @@ final class ClaudeProviderTests: XCTestCase {
                 "/tmp/claude/.credentials.json": #"{"claudeAiOauth":{"accessToken":"token","subscriptionType":"pro","scopes":["user:profile"]}}"#
             ]), now: { now }),
             usageClient: ClaudeUsageClient(httpClient: httpClient),
-            logUsageScanner: ClaudeLogFixture.scanner(home: nil),
+            logUsageScanner: ClaudeLogFixture.scanner(home: nil), yCodingUsageScanner: .isolated,
             now: { now },
             pricing: { TestPricing.bundled }
         )
@@ -742,7 +742,7 @@ final class ClaudeProviderTests: XCTestCase {
                 "/tmp/claude/.credentials.json": #"{"claudeAiOauth":{"accessToken":"token","subscriptionType":"pro","scopes":["user:profile"]}}"#
             ]), now: { clock.now }),
             usageClient: ClaudeUsageClient(httpClient: httpClient),
-            logUsageScanner: ClaudeLogFixture.scanner(home: nil),
+            logUsageScanner: ClaudeLogFixture.scanner(home: nil), yCodingUsageScanner: .isolated,
             now: { clock.now },
             pricing: { TestPricing.bundled }
         )
@@ -786,7 +786,7 @@ final class ClaudeProviderTests: XCTestCase {
         let provider = ClaudeProvider(
             authStore: configuredAuthStore(files: files, now: { now }),
             usageClient: ClaudeUsageClient(httpClient: httpClient),
-            logUsageScanner: ClaudeLogFixture.scanner(home: nil),
+            logUsageScanner: ClaudeLogFixture.scanner(home: nil), yCodingUsageScanner: .isolated,
             now: { now },
             pricing: { TestPricing.bundled }
         )

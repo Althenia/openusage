@@ -41,6 +41,10 @@ You can also provide the key directly (checked in this order, first match wins):
 A key saved through the app overrides an environment key (the config file is checked first); removing
 the saved key falls back to the environment key, or to none.
 
+If you use YCoding and have added your OpenRouter key there, OpenUsage can also read that key
+(read-only) when no config file or environment key is set — no need to enter it twice. The API Keys
+card still shows "not set" in that case, since the key lives in YCoding, not in OpenUsage.
+
 ## Troubleshooting
 
 - **"No OpenRouter API key"** — add the key in Settings → API Keys (or the config file / env var), then refresh.

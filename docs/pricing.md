@@ -1,6 +1,6 @@
 # Model Pricing
 
-How OpenUsage turns token counts into the estimated dollars on the Claude, Codex, Cursor, and Grok spend tiles. Grok uses the cost recorded in its session logs when available and only estimates older turns without one. OpenRouter and OpenCode do not use these estimates because their sources already report the cost directly.
+How OpenUsage turns token counts into the estimated dollars on the Claude, Codex, Cursor, and Grok spend tiles. Grok uses the cost recorded in its session logs when available and only estimates older turns without one. Usage folded in from the YCoding agent works the same way: requests with a recorded cost use it directly, and only requests without one are estimated here, at standard rates without long-context tiers because YCoding's history is summed per day and model before pricing. OpenRouter and OpenCode do not use these estimates because their sources already report the cost directly.
 
 ## Where prices come from
 

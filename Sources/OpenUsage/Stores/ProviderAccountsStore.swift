@@ -34,6 +34,7 @@ struct ProviderAccountSource: Codable, Equatable, Sendable {
         case codexSwap
         case codexHome
         case pi
+        case ycoding
     }
 
     var kind: Kind

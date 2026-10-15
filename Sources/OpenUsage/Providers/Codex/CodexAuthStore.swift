@@ -33,11 +33,16 @@ struct CodexPiCredentialSource: Hashable, Sendable {
     let providerID: String
 }
 
+struct CodexYCodingCredentialSource: Hashable, Sendable {
+    let databasePath: String
+}
+
 struct CodexAuthState: Hashable, Sendable {
     enum Source: Hashable, Sendable {
         case file(path: String)
         case keychain(account: String)
         case pi(CodexPiCredentialSource)
+        case ycoding(CodexYCodingCredentialSource)
     }
 
     var auth: CodexAuth
@@ -107,6 +112,8 @@ struct CodexAuthStore: Sendable {
     /// write back. Empty for the plain card, which writes wherever it reads.
     var writableAuthHomes: Set<String>
     var piCredentialSources: [CodexPiCredentialSource]
+    var ycodingCredentialSources: [CodexYCodingCredentialSource]
+    var ycodingCredentials: YCodingCredentialReader
 
     init(
         environment: EnvironmentReading = ProcessEnvironmentReader(),
@@ -116,7 +123,9 @@ struct CodexAuthStore: Sendable {
         expectedIdentity: CodexAccountIdentity? = nil,
         additionalAuthHomes: [String] = [],
         writableAuthHomes: Set<String> = [],
-        piCredentialSources: [CodexPiCredentialSource] = []
+        piCredentialSources: [CodexPiCredentialSource] = [],
+        ycodingCredentialSources: [CodexYCodingCredentialSource] = [],
+        ycodingCredentials: YCodingCredentialReader? = nil
     ) {
         self.environment = environment
         self.files = files
@@ -126,11 +135,15 @@ struct CodexAuthStore: Sendable {
         self.additionalAuthHomes = additionalAuthHomes
         self.writableAuthHomes = writableAuthHomes
         self.piCredentialSources = piCredentialSources
+        self.ycodingCredentialSources = ycodingCredentialSources
+        self.ycodingCredentials = ycodingCredentials
+            ?? YCodingCredentialReader(files: files, environment: environment)
     }
 
     func loadAuthCandidates() -> [CodexAuthState] {
         authPaths().compactMap { loadAuth(at: $0) }
             + piCredentialSources.compactMap(loadPiAuth)
+            + ycodingCredentialSources.compactMap(loadYCodingAuth)
     }
 
     func loadPiAuth(_ source: CodexPiCredentialSource) -> CodexAuthState? {
@@ -138,6 +151,13 @@ struct CodexAuthStore: Sendable {
             files: files, path: source.path, providerID: source.providerID
         ) else { return nil }
         return scoped(CodexAuthState(auth: auth, source: .pi(source), readOnly: true))
+    }
+
+    func loadYCodingAuth(_ source: CodexYCodingCredentialSource) -> CodexAuthState? {
+        guard let auth = YCodingCodexLoginScanner.loadAuth(
+            reader: ycodingCredentials, source: source
+        ) else { return nil }
+        return scoped(CodexAuthState(auth: auth, source: .ycoding(source), readOnly: true))
     }
 
     /// Reads the credential from a single on-disk auth file — the targeted counterpart to
@@ -187,7 +207,7 @@ struct CodexAuthStore: Sendable {
             try files.writeText(path, text)
         case .keychain(let account):
             try keychain.writeGenericPassword(service: Self.keychainService, account: account, value: text)
-        case .pi:
+        case .pi, .ycoding:
             throw CodexAuthError.tokenConflict
         }
     }

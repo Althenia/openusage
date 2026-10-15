@@ -51,7 +51,8 @@ enum ProviderCatalog {
                 authStore: CodexAuthStore(
                     additionalAuthHomes: codex.plainAuthHomes,
                     writableAuthHomes: Set(codex.plainWritableAuthHomes),
-                    piCredentialSources: codex.plainPiCredentialSources
+                    piCredentialSources: codex.plainPiCredentialSources,
+                    ycodingCredentialSources: codex.plainYCodingCredentialSources
                 ),
                 logUsageScanner: CodexLogUsageScanner(additionalHomes: codex.plainAuthHomes)
             ))
@@ -63,7 +64,8 @@ enum ProviderCatalog {
                         expectedIdentity: card.identity,
                         additionalAuthHomes: card.authHomes,
                         writableAuthHomes: Set(card.writableAuthHomes),
-                        piCredentialSources: card.piCredentialSources
+                        piCredentialSources: card.piCredentialSources,
+                        ycodingCredentialSources: card.ycodingCredentialSources
                     ),
                     historyScope: .account(card.identity, codex.historyHomes, claimsPiUsage: card.claimsPiUsage)
                 )

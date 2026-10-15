@@ -9,6 +9,7 @@ struct CodexAccountCard: Equatable, Sendable {
     /// OpenUsage may refresh and write back.
     let writableAuthHomes: [String]
     let piCredentialSources: [CodexPiCredentialSource]
+    let ycodingCredentialSources: [CodexYCodingCredentialSource]
     /// pi's usage logs name no account, so they count for the account in pi's `openai-codex` login.
     let claimsPiUsage: Bool
 }
@@ -24,10 +25,11 @@ struct CodexAccountDiscovery: Equatable, Sendable {
     /// The independent homes among `plainAuthHomes`; see `CodexAccountCard.writableAuthHomes`.
     var plainWritableAuthHomes: [String] = []
     var plainPiCredentialSources: [CodexPiCredentialSource] = []
+    var plainYCodingCredentialSources: [CodexYCodingCredentialSource] = []
 }
 
 extension ProviderAccountAssembly {
-    /// One card per ChatGPT account found across Codex homes, pi logins, Swap slots, and the Keychain.
+    /// One card per ChatGPT account found across Codex homes, pi logins, the YCoding login, Swap slots, and the Keychain.
     /// A lone account stays on the plain `codex` provider; cards appear once a second account is
     /// known, or once Swap or the saved registry already made this a multi-account install.
     static func makeCodexCards(
@@ -54,6 +56,9 @@ extension ProviderAccountAssembly {
         let piScan = PiCodexLoginScanner(
             environment: observer.environment, files: observer.files, homeDirectory: observer.homeDirectory
         ).scan()
+        let ycodingScan = YCodingCodexLoginScanner(
+            environment: observer.environment, files: observer.files, homeDirectory: observer.homeDirectory
+        ).scan()
         // Keychain can hold a different default login with no auth.json or saved Swap slot.
         let auth = CodexAuthStore(environment: observer.environment, files: observer.files,
                                   keychain: observer.keychain)
@@ -68,7 +73,8 @@ extension ProviderAccountAssembly {
             $0.family == "codex" && $0.identityKey.contains("|")
         }
         let knownIdentities = Set(
-            homeLogins.map(\.identity) + piScan.logins.map(\.identity) + swaps.map(\.identity)
+            homeLogins.map(\.identity) + piScan.logins.map(\.identity) + ycodingScan.logins.map(\.identity)
+                + swaps.map(\.identity)
                 + [keychainIdentity].compactMap { $0 }
         )
         guard !swaps.isEmpty || hasEstablishedAccounts || knownIdentities.count > 1 || !profileLabels.isEmpty else {
@@ -79,7 +85,8 @@ extension ProviderAccountAssembly {
                     .subtracting(managedHomes).sorted(),
                 plainPiCredentialSources: piScan.logins.map {
                     CodexPiCredentialSource(path: $0.authPath, providerID: $0.providerID)
-                }
+                },
+                plainYCodingCredentialSources: ycodingScan.logins.map(\.source)
             )
         }
 
@@ -134,6 +141,10 @@ extension ProviderAccountAssembly {
                     named: login.label != nil,
                     source: .init(kind: .pi, anchor: login.providerID, holdsDefaultSource: false))
         }
+        for login in ycodingScan.logins {
+            observe(login.identity, label: label(for: login.identity),
+                    source: .init(kind: .ycoding, anchor: login.source.databasePath, holdsDefaultSource: false))
+        }
 
         let records = accountsStore.reconcile(with: observations)
         func standardized(_ home: String) -> String {
@@ -163,13 +174,15 @@ extension ProviderAccountAssembly {
             let matchingPi = piScan.logins.filter { $0.identity == identity }.map {
                 CodexPiCredentialSource(path: $0.authPath, providerID: $0.providerID)
             }
+            let matchingYCoding = ycodingScan.logins.filter { $0.identity == identity }.map(\.source)
             let writableHomes = Set(matchingHomes.map { CodexHomeScanner.canonicalHome($0, homeDirectory: homeDirectory) })
                 .subtracting(managedHomes)
             return CodexAccountCard(id: record.id, identity: identity,
                 displayName: profileLabels[identity.key] ?? labels[identity.key] ?? "Codex",
                 authHomes: Set(matchingHomes + matchingSwapHomes).sorted(),
                 writableAuthHomes: writableHomes.sorted(),
-                piCredentialSources: matchingPi, claimsPiUsage: piUsageOwner == identity)
+                piCredentialSources: matchingPi, ycodingCredentialSources: matchingYCoding,
+                claimsPiUsage: piUsageOwner == identity)
         }
         return CodexAccountDiscovery(cards: cards, historyHomes: historyHomes)
     }

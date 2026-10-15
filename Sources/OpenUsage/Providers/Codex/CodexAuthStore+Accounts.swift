@@ -21,18 +21,19 @@ extension CodexAuthStore {
         return candidate
     }
 
-    /// Sibling homes and pi entries reach the plain card only through account discovery, which keeps
-    /// them read-only unless the home was found to be independent (see `isWritable`).
+    /// Sibling homes, pi entries, and the YCoding login reach the plain card only through account
+    /// discovery, which keeps them read-only unless the home was found to be independent (see
+    /// `isWritable`).
     private func isDiscovered(_ source: CodexAuthState.Source) -> Bool {
         switch source {
         case .file(let path): additionalAuthHomes.contains { path == $0.trimmingTrailingSlashes + "/auth.json" }
         case .keychain: false
-        case .pi: true
+        case .pi, .ycoding: true
         }
     }
 
     /// Only an independent Codex home may have its token rotated by OpenUsage. xswap's main and saved
-    /// homes, pi, and the Keychain belong to tools that manage their own credential lifecycle.
+    /// homes, pi, YCoding, and the Keychain belong to tools that manage their own credential lifecycle.
     func isWritable(_ source: CodexAuthState.Source) -> Bool {
         guard case .file(let path) = source else { return false }
         return writableAuthHomes.contains(CodexHomeScanner.canonicalHome((path as NSString).deletingLastPathComponent))
@@ -43,6 +44,7 @@ extension CodexAuthStore {
         case .file(let path): loadAuth(at: path) == candidate
         case .keychain(let account): await loadOffMainActor { loadKeychainAuth(account: account) } == candidate
         case .pi(let source): loadPiAuth(source) == candidate
+        case .ycoding(let source): loadYCodingAuth(source) == candidate
         }
     }
 }

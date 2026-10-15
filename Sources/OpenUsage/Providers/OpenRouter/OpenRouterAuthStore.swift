@@ -38,6 +38,7 @@ enum OpenRouterAuthError: Error, LocalizedError, Equatable {
 /// doesn't inherit the interactive shell environment, so `ProcessEnvironmentReader` captures the
 /// login shell's environment at launch (see `LoginShellEnvironment`) — meaning an env var exported in
 /// a shell profile is honored even in a packaged build; the config file remains the explicit path.
+/// When neither holds a key, the OpenRouter key YCoding already stored is used read-only.
 struct OpenRouterAuthStore: Sendable {
     /// Config files checked in order; first readable key wins. JSON (`apiKey` / `api_key` / `key`) or a
     /// plain-text file containing only the key.
@@ -49,10 +50,12 @@ struct OpenRouterAuthStore: Sendable {
     static let environmentNames = ["OPENROUTER_API_KEY", "OPENROUTER_KEY"]
 
     private let store: UserAPIKeyStore
+    private let ycodingCredentials: YCodingCredentialReader
 
     init(
         files: TextFileAccessing = LocalTextFileAccessor(),
-        environment: EnvironmentReading = ProcessEnvironmentReader()
+        environment: EnvironmentReading = ProcessEnvironmentReader(),
+        ycodingCredentials: YCodingCredentialReader? = nil
     ) {
         store = UserAPIKeyStore(
             configPaths: Self.configPaths,
@@ -61,9 +64,19 @@ struct OpenRouterAuthStore: Sendable {
             environment: environment,
             makeError: { OpenRouterAuthError($0) }
         )
+        self.ycodingCredentials = ycodingCredentials
+            ?? YCodingCredentialReader(files: files, environment: environment)
     }
 
-    func loadAPIKey() -> OpenRouterAuth? { store.loadKey().map(OpenRouterAuth.init(apiKey:)) }
+    func loadAPIKey() -> OpenRouterAuth? {
+        if let key = store.loadKey() { return OpenRouterAuth(apiKey: key) }
+        do {
+            return try ycodingCredentials.apiKey(integration: "openrouter").map(OpenRouterAuth.init(apiKey:))
+        } catch {
+            AppLog.error(LogTag.auth("openrouter"), "YCoding credential database could not be read; YCoding fallback skipped")
+            return nil
+        }
+    }
     func currentAPIKey() -> String? { store.loadKey() }
     func keyStatus() -> APIKeyStatus { store.keyStatus() }
     func saveAPIKey(_ key: String) throws { try store.saveKey(key) }

@@ -614,6 +614,7 @@ final class CodexProviderTests: XCTestCase {
             ))),
             logUsageScanner: CodexLogFixture.scanner(home: nil),
             openCodeUsageScanner: openCodeScanner,
+            yCodingUsageScanner: .isolated,
             now: { now },
             pricing: {
                 ModelPricing(

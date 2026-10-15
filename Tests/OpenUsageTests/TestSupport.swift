@@ -402,9 +402,14 @@ extension CodexHistoryHomes {
     }
 }
 
+extension YCodingUsageScanner {
+    /// Points at no database, so a developer's real YCoding history never folds into fixture totals.
+    static let isolated = YCodingUsageScanner(databasePath: { "/nonexistent/ycoding.db" })
+}
+
 extension CodexProvider {
-    /// Counts only `logUsageScanner`'s rollouts, so a developer's real pi and OpenCode history never
-    /// folds into fixture totals.
+    /// Counts only `logUsageScanner`'s rollouts, so a developer's real pi, OpenCode, and YCoding
+    /// history never folds into fixture totals.
     static func isolated(
         localHistoryWait: Duration = .seconds(5),
         provider: Provider = CodexProvider.makeProvider(),
@@ -418,7 +423,9 @@ extension CodexProvider {
         CodexProvider(
             localHistoryWait: localHistoryWait, provider: provider, authStore: authStore, usageClient: usageClient,
             logUsageScanner: logUsageScanner, piUsageScanner: CodexLogFixture.noPi(),
-            openCodeUsageScanner: OpenCodeCodexUsageScanner(databasePaths: { [] }), historyScope: historyScope,
+            openCodeUsageScanner: OpenCodeCodexUsageScanner(databasePaths: { [] }),
+            yCodingUsageScanner: .isolated,
+            historyScope: historyScope,
             now: now, pricing: pricing
         )
     }

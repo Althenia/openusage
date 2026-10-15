@@ -2,7 +2,7 @@ import Foundation
 
 extension CodexProvider {
     /// Cards bound to one account try every matching login in order, through the same `probe` the
-    /// plain card uses. Read-only sources (xswap, pi, the Keychain) count only while their token is
+    /// plain card uses. Read-only sources (xswap, pi, YCoding, the Keychain) count only while their token is
     /// valid; an independent Codex home refreshes and writes back like the plain card. A login that
     /// changes on disk mid-refresh invalidates the pending result, so the pass starts over once.
     /// Rotated credentials that could not be written back stay in memory; the conflict check compares
@@ -42,6 +42,6 @@ extension CodexProvider {
 private struct CodexAccountLoginError: LocalizedError, CategorizedError {
     var errorCategory: ErrorCategory { .authExpired }
     var errorDescription: String? {
-        "No valid login for this Codex account. Sign in with Codex, xswap, or pi, then refresh."
+        "No valid login for this Codex account. Sign in with Codex, xswap, pi, or YCoding, then refresh."
     }
 }

@@ -19,6 +19,7 @@ final class ClaudeProvider: ProviderRuntime {
     let authStore: ClaudeAuthStore
     let usageClient: ClaudeUsageClient
     let logUsageScanner: ClaudeLogUsageScanner
+    let yCodingUsageScanner: YCodingUsageScanner
     let allowsUnattributedPiUsage: Bool
     let now: @Sendable () -> Date
     let pricing: @Sendable () async -> ModelPricing
@@ -58,6 +59,7 @@ final class ClaudeProvider: ProviderRuntime {
         authStore: ClaudeAuthStore = ClaudeAuthStore(),
         usageClient: ClaudeUsageClient = ClaudeUsageClient(),
         logUsageScanner: ClaudeLogUsageScanner = ClaudeLogUsageScanner(),
+        yCodingUsageScanner: YCodingUsageScanner = .shared,
         allowsUnattributedPiUsage: Bool = true,
         now: @escaping @Sendable () -> Date = Date.init,
         pricing: @escaping @Sendable () async -> ModelPricing = { await ModelPricingStore.shared.current() }
@@ -66,6 +68,7 @@ final class ClaudeProvider: ProviderRuntime {
         self.authStore = authStore
         self.usageClient = usageClient
         self.logUsageScanner = logUsageScanner
+        self.yCodingUsageScanner = yCodingUsageScanner
         self.allowsUnattributedPiUsage = allowsUnattributedPiUsage
         self.now = now
         self.pricing = pricing
@@ -306,20 +309,29 @@ final class ClaudeProvider: ProviderRuntime {
     ) async -> ProviderSnapshot {
         var mapped = initialUsage
         // Local spend tiles, scanned natively from Claude Code's session logs and priced through the
-        // shared pricing store, merged with Claude usage that happened inside pi (attributed back here).
-        // Both scans run on their scanner actors, off the main actor, and do not require an OAuth login.
+        // shared pricing store, merged with Claude usage that happened inside pi or YCoding
+        // (attributed back here). The scans run off the main actor and do not require an OAuth login.
+        // pi rows name a provider family, not an account, so they follow the one card that claims
+        // unattributed usage. YCoding rows name the YCoding credential/profile they ran under, so
+        // with several Claude cards each card claims only the rows resolved to its own account
+        // identity from the auth store; the single-card case keeps claiming every row.
         let pricing = await pricing()
         let nativeScan = await logUsageScanner.scan(now: now(), pricing: pricing)
         let piScan = allowsUnattributedPiUsage
             ? await PiUsageScanner.shared.scan(cardID: provider.id, now: now(), pricing: pricing)
             : nil
+        let yCodingAttribution: YCodingAttribution = allowsUnattributedPiUsage
+            ? .all
+            : .claudeAccount(identityKey: authStore.expectedIdentityKey)
+        let yCodingScan = await yCodingUsageScanner.scan(
+            cardID: ProviderAccountID.family(of: provider.id), now: now(), pricing: pricing,
+            attribution: yCodingAttribution
+        )
         var usageHistory: ProviderUsageHistory?
         // Cancellation can land between the native and pi scans. Treat the pair as one unit so a
         // partial result cannot replace the last-good combined history in WidgetDataStore.
-        if !Task.isCancelled, let scan = DailyUsageAccumulator.merged([nativeScan, piScan]) {
-            let note = piScan == nil
-                ? "From your Claude usage history (estimated)"
-                : "From your Claude usage history and pi (estimated)"
+        if !Task.isCancelled, let scan = DailyUsageAccumulator.merged([nativeScan, piScan, yCodingScan]) {
+            let note = Self.localUsageSourceNote(hasPi: piScan != nil, hasYCoding: yCodingScan != nil)
             usageHistory = ProviderUsageHistory(
                 series: scan.series,
                 modelUsage: scan.modelUsage,
@@ -343,6 +355,16 @@ final class ClaudeProvider: ProviderRuntime {
             usageHistory: usageHistory,
             warning: warning
         )
+    }
+
+    private static func localUsageSourceNote(hasPi: Bool, hasYCoding: Bool) -> String {
+        var sources = ["Claude usage history"]
+        if hasPi { sources.append("pi") }
+        if hasYCoding { sources.append("YCoding") }
+        let joined = sources.count > 2
+            ? sources.dropLast().joined(separator: ", ") + ", and " + sources[sources.count - 1]
+            : sources.joined(separator: " and ")
+        return "From your \(joined) (estimated)"
     }
 
     private func fetchLiveUsage(
