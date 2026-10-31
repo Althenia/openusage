@@ -73,12 +73,14 @@ enum ProviderCatalog {
         }
         providers += [
             CursorProvider(),
+            AnthropicAPIProvider(),
             AntigravityProvider(),
             CopilotProvider(defaults: defaults),
             DevinProvider(),
             GrokProvider(),
             MuseProvider(),
             OllamaProvider(),
+            OpenAIAPIProvider(),
             OpenCodeProvider(),
             OpenRouterProvider(),
             ZAIProvider()

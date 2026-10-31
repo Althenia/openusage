@@ -89,5 +89,10 @@ in-app **Settings → API Keys** card manages its key with no per-provider UI wo
 - `AppContainer` collects every `APIKeyManaging` provider into `apiKeyProviders`, which the card
   lists. Add the provider to the registry as usual and the card picks it up.
 
+Providers that need an organization admin key (Anthropic API, OpenAI API) use their own environment
+variable and config file and never read ordinary inference keys. A key without reporting access must
+fail with a distinct invalid-key, permission-denied, or unsupported error rather than a blank or zero
+metric. Keys are never logged or placed in errors, snapshots, or exports.
+
 Persist the key to a file the auth store already checks (don't introduce a parallel store), so the
 file remains the source of truth and a user can still edit it by hand.

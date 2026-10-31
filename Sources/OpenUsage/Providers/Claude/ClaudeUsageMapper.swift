@@ -138,6 +138,18 @@ enum ClaudeUsageMapper {
         }
         let base = raw.titleCased(separator: { $0 == " " }, lowercasingTail: true)
 
+        if raw.lowercased() == "pro" { return "Pro" }
+        if raw.lowercased() == "max" {
+            switch rateLimitTier {
+            case "default_claude_max_5x":
+                return "Max"
+            case "default_claude_max_20x", "claude_max_subscription_20x":
+                return "Ultra"
+            default:
+                break
+            }
+        }
+
         guard let tier = rateLimitTier,
               let match = tier.range(of: #"\d+x"#, options: .regularExpression)
         else {
@@ -284,4 +296,3 @@ private enum HTTPDateFormatter {
         return formatter.date(from: value)
     }
 }
-

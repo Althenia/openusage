@@ -231,10 +231,7 @@ final class CodexUsageMapperTests: XCTestCase {
         XCTAssertEqual(progress(mapped.lines, "Weekly")?.used, 7)
     }
 
-    func testSurfacesSparkLinesFromAdditionalRateLimits() throws {
-        // The usage body carries model-specific limits in `additional_rate_limits`; the Spark entry's
-        // primary/secondary windows become the Spark (5-hour) and Spark Weekly meters. Regression for
-        // issue #796 — the Swift edition dropped these when it didn't port the JS plugin's parsing.
+    func testIgnoresRetiredSparkLimitsWhilePreservingCoreWindows() throws {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let nowSec = Int(now.timeIntervalSince1970)
         let body = Data("""
@@ -269,18 +266,12 @@ final class CodexUsageMapperTests: XCTestCase {
 
         let mapped = try CodexUsageMapper.mapUsageResponse(response, now: now)
 
-        XCTAssertEqual(progress(mapped.lines, "Spark")?.used, 25)
-        XCTAssertEqual(progress(mapped.lines, "Spark")?.periodDurationMs, 18_000_000)
-        XCTAssertEqual(progress(mapped.lines, "Spark")?.resetsAt,
-                       Date(timeIntervalSince1970: TimeInterval(nowSec + 3600)))
-        XCTAssertEqual(progress(mapped.lines, "Spark Weekly")?.used, 40)
-        XCTAssertEqual(progress(mapped.lines, "Spark Weekly")?.periodDurationMs, 604_800_000)
-        // The core Session/Weekly windows are unaffected by the new parsing.
+        XCTAssertEqual(mapped.lines.map(\.label), ["Session", "Weekly"])
         XCTAssertEqual(progress(mapped.lines, "Session")?.used, 5)
         XCTAssertEqual(progress(mapped.lines, "Weekly")?.used, 10)
     }
 
-    func testMapsWeeklyOnlySparkPrimaryWindowByDuration() throws {
+    func testIgnoresRetiredWeeklyOnlySparkLimit() throws {
         let body = Data("""
         {
           "additional_rate_limits": [{
@@ -302,12 +293,11 @@ final class CodexUsageMapperTests: XCTestCase {
         )
 
         XCTAssertNil(progress(mapped.lines, "Spark"))
-        XCTAssertEqual(progress(mapped.lines, "Spark Weekly")?.used, 7)
-        XCTAssertEqual(progress(mapped.lines, "Spark Weekly")?.periodDurationMs, CodexUsageMapper.weeklyPeriodMs)
+        XCTAssertNil(progress(mapped.lines, "Spark Weekly"))
+        XCTAssertTrue(mapped.lines.isEmpty)
     }
 
-    func testMatchesSparkByMeteredFeatureWhenLimitNameLacksSpark() throws {
-        // `limit_name` wording can shift; matching `metered_feature` too keeps the row resolving.
+    func testIgnoresRetiredSparkMeteredFeature() throws {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let body = Data("""
         {
@@ -324,13 +314,10 @@ final class CodexUsageMapperTests: XCTestCase {
 
         let mapped = try CodexUsageMapper.mapUsageResponse(response, now: now)
 
-        XCTAssertEqual(progress(mapped.lines, "Spark")?.used, 12)
+        XCTAssertTrue(mapped.lines.isEmpty)
     }
 
     func testIgnoresNonSparkAndMalformedAdditionalRateLimits() throws {
-        // Non-Spark model limits have no descriptors, so they aren't surfaced; a null/non-dictionary
-        // element is skipped without discarding its siblings; a Spark entry missing `rate_limit` yields
-        // no lines. None of this should ever throw.
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let body = Data("""
         {

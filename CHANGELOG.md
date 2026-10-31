@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### New Features
+- Add Anthropic API: organization Messages API tokens and actual reported USD cost for the current UTC month, read with an Admin API key
+- Add OpenAI API: organization completions tokens (input plus output, all modalities) and actual reported USD cost for the current UTC month, read with an organization Admin key
+- Add the Antigravity Argon Weekly meter for the separate weekly allowance Antigravity reports, enabled and tucked below the caret by default
+
+### Bug Fixes
+- Show Claude's current individual plan names (Pro, Max, Ultra) in place of Max 5x and Max 20x; the Session meter appears only when Claude reports a five-hour window
+- Retire the live Codex Spark and Spark Weekly meters; historical Spark tokens, model breakdowns, and pricing are kept
+
 ## v0.7.15-beta.1
 
 ### New Features

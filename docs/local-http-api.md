@@ -108,7 +108,7 @@ is still 0 because OpenCode reports whole percentages.
 | Provider | Resource keys |
 | --- | --- |
 | Claude | `session`, `weekly`, `sonnet`, `fable`, `extraUsage`, `rateLimitResets` |
-| Codex | `session`, `weekly`, `spark`, `sparkWeekly`, `credits`, `creditValue`, `rateLimitResets` |
+| Codex | `session`, `weekly`, `credits`, `creditValue`, `rateLimitResets` |
 | Cursor | `totalUsage`, `grokBot`, `autoUsage`, `apiUsage`, `onDemand`, `requests`, `credits` |
 | Antigravity | `geminiSession`, `geminiWeekly`, `nonGeminiSession`, `nonGeminiWeekly` |
 | Copilot | `premiumCredits`, `extraUsage`, `orgCredits`, `orgSpend`, `chat`, `completions` |
@@ -121,6 +121,9 @@ is still 0 because OpenCode reports whole percentages.
 
 Charts, colors, subtitles, formatted badges, layout state, and historical spend periods stay out of this
 contract. Codex's combined Credits UI row becomes two scalar resources: `credits` and `creditValue`.
+
+Anthropic API and OpenAI API report month-to-date usage and cost, not remaining allowances. Those rows
+are available in normalized usage snapshots but do not add resources to `/v1/limits`.
 
 ## Legacy usage response shape
 

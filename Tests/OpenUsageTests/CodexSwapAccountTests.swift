@@ -108,7 +108,7 @@ final class CodexSwapAccountTests: XCTestCase {
         XCTAssertTrue(Set(ids).isSubset(of: Set(fresh.displayGroups.map { $0.provider.id })))
         for id in ids {
             XCTAssertTrue(fresh.pinnedMetricIDs.contains(id + ".weekly"))
-            XCTAssertTrue(fresh.expandedMetricIDs.contains(id + ".spark"))
+            XCTAssertTrue(fresh.expandedMetricIDs.contains(id + ".rateLimitResets"))
         }
         // Model the pre-Swap installation, including an explicit pin customization.
         for hasSavedPlacement in [false, true] {
@@ -125,7 +125,7 @@ final class CodexSwapAccountTests: XCTestCase {
                 defaultExpandedMetricIDs: DefaultLayout.expandingAccounts(DefaultLayout.expandedMetricIDs, providerIDs: ids))
             XCTAssertTrue(Set(ids).isSubset(of: Set(upgraded.displayGroups.map { $0.provider.id })))
             XCTAssertEqual(upgraded.pinnedMetricIDs, oldPins)
-            XCTAssertTrue(upgraded.expandedMetricIDs.contains(try XCTUnwrap(ids.first { $0 != "codex" }) + ".spark"))
+            XCTAssertTrue(upgraded.expandedMetricIDs.contains(try XCTUnwrap(ids.first { $0 != "codex" }) + ".rateLimitResets"))
         }
     }
 

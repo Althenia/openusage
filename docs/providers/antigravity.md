@@ -12,12 +12,15 @@ Antigravity has two shared quota pools, and each pool has two windows — a roll
 | Weekly | The same Gemini pool's weekly window |
 | Claude | The shared non-Gemini pool (Claude, GPT-OSS, …), rolling 5-hour window |
 | Claude Weekly | The same non-Gemini pool's weekly window |
+| Argon Weekly | The separate weekly-only Gemini 4 Argon quota that paid Pro plans get |
 | Usage Trend | Daily token usage from local Antigravity conversations |
 | Today / Yesterday / Last 30 Days | Local token usage and estimated API-equivalent spend |
 
 When Antigravity reports your subscription tier (such as `Pro` or `Ultra`), OpenUsage shows it beside the provider name.
 
-Gemini Pro and Gemini Flash are one pool: using either model drains the same quota, so OpenUsage shows one meter per window instead of separate Pro and Flash meters. That pair is named Session and Weekly to match the other providers' rows. Every non-Gemini model shares the second pool, shown under the Claude name (like Codex's Spark pair). The quota API reports fractions, while token usage and estimated spend come separately from local conversation databases.
+Gemini Pro and Gemini Flash are one pool: using either model drains the same quota, so OpenUsage shows one meter per window instead of separate Pro and Flash meters. That pair is named Session and Weekly to match the other providers' rows. Every non-Gemini model shares the second pool, shown under the Claude name. The quota API reports fractions, while token usage and estimated spend come separately from local conversation databases.
+
+Observed quota-summary payloads report a dedicated weekly-only Argon allowance for paid Pro plans, with no five-hour Argon bucket. Their description says Ultra includes Argon in the larger Gemini pool. OpenUsage shows Argon Weekly only when the exact observed bucket is present with a usable remaining fraction; it never infers an allowance from the plan name. An absent bucket reads **No data**, not zero. The row is enabled, On Demand, and unpinned by default, after Claude Weekly and before Usage Trend.
 
 While a pool's rolling 5-hour window has no usage yet, that meter reads **Not started** on the trailing label instead of a reset countdown; hover explains that the session begins after your first message. The weekly meters always show a normal reset countdown.
 
@@ -48,14 +51,24 @@ The transcript logs don't include token accounting, so they aren't used. Missing
 - **"Couldn't read Antigravity credentials…"** — unlock Keychain or sign in to Antigravity again. OpenUsage will not use its cached access token until the current login can be verified.
 - **The weekly meters show "No data"** — your Antigravity build doesn't expose the quota-summary endpoint yet (only newer builds do). The 5-hour meters still work from the older endpoints; updating Antigravity brings the weekly meters back.
 - **A meter shows "No data"** — that pool/window wasn't in the latest response (some tiers only report certain windows). The other meters still update.
+- **Argon Weekly shows "No data" on Pro** — the current source did not report a usable Argon bucket. Public captures disagree about which Cloud Code client identities receive it, so OpenUsage leaves the existing client identity unchanged. Starting Antigravity makes its local language-server source available.
 - **Spend or usage history shows "No data"** — Antigravity hasn't written usable conversation databases yet. Run an Antigravity or `agy` session, then refresh.
 - **Where did the Gemini Pro and Flash meters go?** — merged: both models draw from the one shared Gemini pool, which is now the single Session meter.
 - **Quotas look full after heavy use** — the 5-hour windows reset on a rolling basis and the weekly windows once a week; the reset time is shown on each meter.
 
 ## Under the hood
 
-Best source first: the local language server discovered by scanning for the `language_server` / `agy` process and reading its CSRF token and listening ports; then Google Cloud Code using the Keychain token, refreshed via Google OAuth when needed. OpenUsage binds its short-lived refreshed-token cache to a one-way fingerprint of the current Keychain refresh credential. Logout, account changes, legacy caches, and expired or malformed entries cannot reuse a previous account's access token. On each source OpenUsage asks the quota-summary endpoint first (`RetrieveUserQuotaSummary` on the language server, `v1internal:retrieveUserQuotaSummary` on Cloud Code) — the only endpoint that reports the merged pools and the weekly windows. Builds without it fall back to the legacy per-model endpoints (`GetUserStatus` / `GetCommandModelConfigs` locally, `fetchAvailableModels` / `retrieveUserQuota` remotely), whose per-model quotas are merged into the two pools by keeping each pool's worst remaining fraction; those endpoints only know the 5-hour windows. The plan name prefers Antigravity's own `userTier` over the inherited Windsurf plan field. Spend history comes from the generation-accounting protobuf records in each local conversation database.
+Best source first: the local language server discovered by scanning for the `language_server` / `agy` process and reading its CSRF token and listening ports; then Google Cloud Code using the Keychain token, refreshed via Google OAuth when needed. OpenUsage binds its short-lived refreshed-token cache to a one-way fingerprint of the current Keychain refresh credential. Logout, account changes, legacy caches, and expired or malformed entries cannot reuse a previous account's access token. On each source OpenUsage asks the quota-summary endpoint first (`RetrieveUserQuotaSummary` on the language server, `v1internal:retrieveUserQuotaSummary` on Cloud Code) — the only endpoint that reports the merged pools, the weekly windows, and the Argon weekly allowance (bucket `gemini-argon-wtu-weekly`, matched by exact ID). Builds without it fall back to the legacy per-model endpoints (`GetUserStatus` / `GetCommandModelConfigs` locally, `fetchAvailableModels` / `retrieveUserQuota` remotely), whose per-model quotas are merged into the two pools by keeping each pool's worst remaining fraction; those endpoints only know the 5-hour windows. The plan name prefers Antigravity's own `userTier` over the inherited Windsurf plan field. Spend history comes from the generation-accounting protobuf records in each local conversation database.
 
 Thanks to [FelixIsaac](https://github.com/FelixIsaac) for identifying the conversation-database source and contributing the original SQLite/protobuf implementation in [issue #1120](https://github.com/robinebers/openusage/issues/1120) and [pull request #1058](https://github.com/robinebers/openusage/pull/1058).
 
 > Reverse-engineered from the app and language-server binary; endpoints and storage may change without notice.
+
+## Argon Source Evidence
+
+The exact `gemini-argon-wtu-weekly` bucket and its Pro/Ultra description come from public provider-payload
+captures in [OpenUsage issue #1397](https://github.com/robinebers/openusage/issues/1397) and
+[OmniRoute pull request #18026](https://github.com/cheaper-inference/OmniRoute/pull/18026), not a published
+Google bucket schema. Google's [statusline documentation](https://www.antigravity.google/docs/cli/statusline)
+documents quota buckets but does not enumerate this ID. Unverified aliases and five-hour Argon IDs are
+not recognized.

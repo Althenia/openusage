@@ -23,6 +23,7 @@ What the app does and how it behaves. These pages describe **behavior, not visua
 
 What each provider tracks, where its credentials come from, and what to do when it shows an error.
 
+- [Anthropic API](providers/anthropic-api.md)
 - [Antigravity](providers/antigravity.md)
 - [Claude](providers/claude.md)
 - [Codex](providers/codex.md)
@@ -32,6 +33,7 @@ What each provider tracks, where its credentials come from, and what to do when 
 - [Grok](providers/grok.md)
 - [Muse](providers/muse.md)
 - [Ollama](providers/ollama.md)
+- [OpenAI API](providers/openai-api.md)
 - [OpenCode](providers/opencode.md)
 - [OpenRouter](providers/openrouter.md)
 - [Z.ai](providers/zai.md)

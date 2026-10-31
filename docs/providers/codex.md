@@ -8,7 +8,6 @@ Tracks your ChatGPT/Codex subscription limits using the login from the Codex CLI
 |---|---|
 | Session | 5-hour rolling window usage |
 | Weekly | 7-day window usage |
-| Spark / Spark Weekly | GPT-5.3-Codex-Spark model limits — a 5-hour and a weekly window. Shown only when your account has the limit (otherwise "No data"), and tucked below the "show more" caret by default |
 | Rate Limit Resets | On-demand rate-limit reset credits, shown as a count (e.g. `2 available`) with a colored dot for the soonest expiry; hover the value for a timeline of each credit's expiry |
 | Extra Usage | Flex credits, shown verbatim as dollars + credits (e.g. `$31.84 · 796 credits`) |
 | Today / Yesterday / Last 30 Days | Local spend, as cost, tokens, or both (see below) |
@@ -140,7 +139,9 @@ For Codex Swap cards, a 401/403 instead tries the next matching access token wit
 Credential changes while a request is pending discard that result and retry from current matching
 logins. The reset-credit action is also bound to its card's account, including after a default switch.
 
-Spark and Spark Weekly come from the same response's `additional_rate_limits` array — model-specific limits that reuse the duration-based Session/Weekly classification. OpenUsage surfaces the entry whose name identifies GPT-5.3-Codex-Spark as those two meters; accounts without the limit simply omit the entry, so the rows read "No data". Other model limits in that array aren't shown.
+Spark and Spark Weekly are no longer live metrics. OpenUsage ignores the usage response's
+`additional_rate_limits` array. Historical GPT-5.3-Codex-Spark tokens, model breakdowns, and pricing
+remain available in local spend and usage history.
 
 OpenUsage preserves Codex's reported `used_percent` verbatim. If the API reports 1% used for an untouched window, the app shows 99% left; if it reports 0%, the app shows 100% left. Codex rows use the normal reset label rather than inferring a special "Not started" state. Burn-rate pacing still waits until enough of the window has elapsed — and until something has actually been used — to make a useful projection.
 

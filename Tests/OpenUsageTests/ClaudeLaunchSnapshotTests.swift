@@ -39,7 +39,7 @@ final class ClaudeLaunchSnapshotTests: XCTestCase {
         XCTAssertNil(snapshot?.lines.first { $0.label == "Today" }, "cached spend tiles are recomputed, never replayed")
         XCTAssertEqual(snapshot?.lines.filter { $0.label == "Note" }.count, 1)
         XCTAssertEqual(snapshot?.warning?.hasPrefix("Updates blocked by Anthropic"), true)
-        XCTAssertEqual(snapshot?.plan, "Max 20x")
+        XCTAssertEqual(snapshot?.plan, "Ultra")
     }
 
     func testRateLimitWithoutLaunchSnapshotServesBadge() async {
@@ -190,6 +190,7 @@ final class ClaudeLaunchSnapshotTests: XCTestCase {
             authStore: authStore,
             usageClient: ClaudeUsageClient(httpClient: RoutingHTTPClient(handler: handler)),
             logUsageScanner: ClaudeLogFixture.scanner(home: nil),
+            yCodingUsageScanner: .isolated,
             now: { Self.now },
             pricing: { TestPricing.bundled }
         )

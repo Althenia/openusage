@@ -59,13 +59,6 @@ final class CodexProvider: ProviderRuntime {
                 .exportingLimit("session", unit: "percent"),
             .percent(id: "\(provider.id).weekly", provider: provider, title: "Weekly")
                 .exportingLimit("weekly", unit: "percent"),
-            // Model-specific Spark limits (GPT-5.3-Codex-Spark), parsed from `additional_rate_limits`.
-            // Declared right after Weekly so they group with the core rate-limit meters; seeded On
-            // Demand (below the caret) and unpinned in `DefaultLayout`.
-            .percent(id: "\(provider.id).spark", provider: provider, title: "Spark")
-                .exportingLimit("spark", unit: "percent"),
-            .percent(id: "\(provider.id).sparkWeekly", provider: provider, title: "Spark Weekly")
-                .exportingLimit("sparkWeekly", unit: "percent"),
             .combined(id: "\(provider.id).credits", provider: provider, title: "Extra Usage", metricLabel: "Credits")
                 .exportingLimit("credits", kind: .balance, unit: "credits", source: .value(kind: .count, label: "credits"))
                 .exportingLimit("creditValue", kind: .balance, unit: "usd", source: .value(kind: .dollars)),

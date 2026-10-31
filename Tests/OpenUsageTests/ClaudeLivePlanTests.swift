@@ -16,15 +16,15 @@ final class ClaudeLivePlanTests: XCTestCase {
                 profile: profile(organizationType: "claude_max", rateLimitTier: "default_claude_max_20x"),
                 credentials: stored
             ),
-            "Max 20x"
+            "Ultra"
         )
         XCTAssertEqual(
             ClaudeUsageMapper.formatLivePlan(profile: profile(organizationType: "claude_pro", rateLimitTier: nil), credentials: stored),
-            "Pro 5x"
+            "Pro"
         )
         XCTAssertEqual(
             ClaudeUsageMapper.formatLivePlan(profile: profile(organizationType: nil, rateLimitTier: "default_claude_max_20x"), credentials: stored),
-            "Max 20x"
+            "Ultra"
         )
         XCTAssertNil(ClaudeUsageMapper.formatLivePlan(
             profile: ClaudeAccountProfile(account: .init(uuid: "a"), organization: nil),
@@ -45,8 +45,8 @@ final class ClaudeLivePlanTests: XCTestCase {
         let first = await provider.refresh()
         let second = await provider.refresh()
 
-        XCTAssertEqual(first.plan, "Max 20x")
-        XCTAssertEqual(second.plan, "Max 20x")
+        XCTAssertEqual(first.plan, "Ultra")
+        XCTAssertEqual(second.plan, "Ultra")
         XCTAssertEqual(progress(first.lines, "Session")?.used, 42)
         // Profile only after the usage call proved the token, and never again for the same token.
         XCTAssertEqual(http.requests.filter { !$0.isClaudeResetGrantsCheck }.map(\.url.path), [
@@ -67,8 +67,8 @@ final class ClaudeLivePlanTests: XCTestCase {
         let first = await provider.refresh()
         let second = await provider.refresh()
 
-        XCTAssertEqual(first.plan, "Max 5x")
-        XCTAssertEqual(second.plan, "Max 5x")
+        XCTAssertEqual(first.plan, "Max")
+        XCTAssertEqual(second.plan, "Max")
         XCTAssertEqual(progress(first.lines, "Session")?.used, 42)
         XCTAssertEqual(progress(second.lines, "Session")?.used, 42)
         XCTAssertNil(first.warning)
@@ -105,9 +105,9 @@ final class ClaudeLivePlanTests: XCTestCase {
         let second = await provider.refresh()
         let third = await provider.refresh()
 
-        XCTAssertEqual(first.plan, "Max 5x")
-        XCTAssertEqual(second.plan, "Max 20x")
-        XCTAssertEqual(third.plan, "Max 20x")
+        XCTAssertEqual(first.plan, "Max")
+        XCTAssertEqual(second.plan, "Ultra")
+        XCTAssertEqual(third.plan, "Ultra")
         XCTAssertEqual(
             http.requests.filter { $0.url.path == "/api/oauth/profile" }.map { $0.headers["Authorization"] },
             ["Bearer token-a", "Bearer token-b"]
@@ -134,8 +134,8 @@ final class ClaudeLivePlanTests: XCTestCase {
         let first = await provider.refresh()
         let second = await provider.refresh()
 
-        XCTAssertEqual(first.plan, "Max 20x")
-        XCTAssertEqual(second.plan, "Max 20x")
+        XCTAssertEqual(first.plan, "Ultra")
+        XCTAssertEqual(second.plan, "Ultra")
         XCTAssertEqual(http.requests.filter { !$0.isClaudeResetGrantsCheck }.map(\.url.path), [
             "/api/oauth/profile", "/api/oauth/usage", "/api/oauth/usage"
         ])
@@ -163,8 +163,8 @@ final class ClaudeLivePlanTests: XCTestCase {
         let first = await provider.refresh()
         let second = await provider.refresh()
 
-        XCTAssertEqual(first.plan, "Max 20x")
-        XCTAssertEqual(second.plan, "Max 20x")
+        XCTAssertEqual(first.plan, "Ultra")
+        XCTAssertEqual(second.plan, "Ultra")
         XCTAssertEqual(first.warning?.hasPrefix("Updates blocked by Anthropic"), true)
         XCTAssertEqual(http.requests.map(\.url.path), ["/api/oauth/profile", "/api/oauth/usage"])
     }
@@ -181,7 +181,7 @@ final class ClaudeLivePlanTests: XCTestCase {
 
         let snapshot = await provider.refresh()
 
-        XCTAssertEqual(snapshot.plan, "Max 5x")
+        XCTAssertEqual(snapshot.plan, "Max")
         XCTAssertTrue(http.requests.isEmpty)
     }
 
@@ -204,6 +204,7 @@ final class ClaudeLivePlanTests: XCTestCase {
             authStore: authStore,
             usageClient: ClaudeUsageClient(httpClient: http),
             logUsageScanner: ClaudeLogFixture.scanner(home: nil),
+            yCodingUsageScanner: .isolated,
             now: { now },
             pricing: { TestPricing.bundled }
         )

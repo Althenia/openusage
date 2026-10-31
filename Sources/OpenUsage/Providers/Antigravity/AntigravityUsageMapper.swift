@@ -14,7 +14,7 @@ struct AntigravityModelConfig: Sendable, Equatable {
 ///
 /// The authoritative source is the `RetrieveUserQuotaSummary` RPC (`parseQuotaSummary`): two pools
 /// (Gemini, shown as "Session"/"Weekly"; Claude = every non-Gemini model incl. GPT-OSS), each with a
-/// rolling 5-hour and a weekly window — up to four meters. Builds without that RPC fall back to the
+/// rolling 5-hour and a weekly window. Builds without that RPC fall back to the
 /// legacy per-model endpoints, whose fine-grained models collapse into the two 5h pool meters
 /// ("Session", "Claude"), each keeping the
 /// worst (lowest) remaining fraction in its pool; the legacy data is 5h-only, so the weekly meters
@@ -31,18 +31,19 @@ enum AntigravityUsageMapper {
 
     // MARK: - Quota summary (the authoritative source)
 
-    /// The four pool buckets `RetrieveUserQuotaSummary` reports, matched by **exact `bucketId` only** —
+    /// The quota buckets `RetrieveUserQuotaSummary` reports, matched by **exact `bucketId` only** —
     /// a future bucket (e.g. `gemini-image-5h`) must never silently join a pool, and pool identity is
     /// never inferred from `displayName`/`window`.
     static let summaryBuckets: [(bucketID: String, label: String, periodMs: Int)] = [
         ("gemini-5h", AntigravityMetric.sessionLabel, MetricPeriod.sessionMs),
         ("gemini-weekly", AntigravityMetric.weeklyLabel, MetricPeriod.weekMs),
         ("3p-5h", AntigravityMetric.claudeLabel, MetricPeriod.sessionMs),
-        ("3p-weekly", AntigravityMetric.claudeWeeklyLabel, MetricPeriod.weekMs)
+        ("3p-weekly", AntigravityMetric.claudeWeeklyLabel, MetricPeriod.weekMs),
+        ("gemini-argon-wtu-weekly", AntigravityMetric.argonWeeklyLabel, MetricPeriod.weekMs)
     ]
 
-    /// `RetrieveUserQuotaSummary` → up to four pool meters, ordered Session, Weekly, Claude,
-    /// Claude Weekly. Accepts both the LS envelope (`{"response": {"groups": …}}`) and the bare remote
+    /// `RetrieveUserQuotaSummary` → reported quota meters, ordered Session, Weekly, Claude,
+    /// Claude Weekly, Argon Weekly. Accepts both the LS envelope (`{"response": {"groups": …}}`) and the bare remote
     /// payload (`{"groups": …}`).
     ///
     /// Nil means "not a summary" (undecodable body / no `groups` anywhere) and the caller may fall back

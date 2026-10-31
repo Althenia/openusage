@@ -12,20 +12,21 @@ final class AntigravityLayoutTests: XCTestCase {
         // Every quota, trend, and spend metric is enabled in provider declaration order.
         XCTAssertEqual(store.placed.map(\.descriptorID), [
             "antigravity.geminiPro", "antigravity.geminiWeekly",
-            "antigravity.claude", "antigravity.claudeWeekly", "antigravity.trend",
+            "antigravity.claude", "antigravity.claudeWeekly", "antigravity.argonWeekly", "antigravity.trend",
             "antigravity.today", "antigravity.yesterday", "antigravity.last30"
         ])
 
         // The Gemini pair is pinned (2-per-provider cap), mirroring Claude/Codex Session+Weekly.
         XCTAssertEqual(store.pinnedMetricIDs, ["antigravity.geminiPro", "antigravity.geminiWeekly"])
+        XCTAssertFalse(store.isPinned("antigravity.argonWeekly"))
 
-        // Gemini pair and trend above the fold; the Claude pool and spend rows below the caret.
+        // Gemini pair and trend above the fold; the Claude pool, Argon, and spend rows below the caret.
         let group = store.customizeGroups.first { $0.provider.id == "antigravity" }
         XCTAssertEqual(group?.alwaysShownMetrics.map(\.id), [
             "antigravity.geminiPro", "antigravity.geminiWeekly", "antigravity.trend"
         ])
         XCTAssertEqual(group?.expandedMetrics.map(\.id), [
-            "antigravity.claude", "antigravity.claudeWeekly",
+            "antigravity.claude", "antigravity.claudeWeekly", "antigravity.argonWeekly",
             "antigravity.today", "antigravity.yesterday", "antigravity.last30"
         ])
         XCTAssertEqual(store.spendCapableProviders.map(\.id), ["antigravity"])
@@ -46,11 +47,13 @@ final class AntigravityLayoutTests: XCTestCase {
 
         XCTAssertTrue(store.isMetricEnabled("antigravity.geminiWeekly"))
         XCTAssertTrue(store.isMetricEnabled("antigravity.claudeWeekly"))
+        XCTAssertTrue(store.isMetricEnabled("antigravity.argonWeekly"))
         XCTAssertTrue(store.isMetricEnabled("antigravity.trend"))
         XCTAssertTrue(store.isMetricEnabled("antigravity.today"))
         XCTAssertTrue(store.isMetricEnabled("antigravity.yesterday"))
         XCTAssertTrue(store.isMetricEnabled("antigravity.last30"))
         XCTAssertTrue(store.expandedMetricIDs.contains("antigravity.claudeWeekly"))
+        XCTAssertTrue(store.expandedMetricIDs.contains("antigravity.argonWeekly"))
         XCTAssertTrue(store.expandedMetricIDs.contains("antigravity.today"))
         XCTAssertTrue(store.expandedMetricIDs.contains("antigravity.yesterday"))
         XCTAssertTrue(store.expandedMetricIDs.contains("antigravity.last30"))

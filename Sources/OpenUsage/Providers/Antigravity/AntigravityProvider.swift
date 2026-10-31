@@ -1,7 +1,7 @@
 import Foundation
 
 /// Tracks pool quota for Antigravity (Google's Codeium/Windsurf-derived AI IDE). Quotas are
-/// fraction-based and shown as up to four percent meters: the shared Gemini pool and the shared
+/// fraction-based and shown as reported percent meters: the shared Gemini pool and the shared
 /// non-Gemini pool (Claude, GPT-OSS), each with a rolling 5-hour and a weekly window.
 ///
 /// Probe order, best source first:
@@ -51,6 +51,7 @@ final class AntigravityProvider: ProviderRuntime {
                 .exportingLimit("nonGeminiSession", unit: "percent"),
             .percent(id: AntigravityMetric.claudeWeeklyID, provider: provider, title: AntigravityMetric.claudeWeeklyLabel)
                 .exportingLimit("nonGeminiWeekly", unit: "percent"),
+            .percent(id: AntigravityMetric.argonWeeklyID, provider: provider, title: AntigravityMetric.argonWeeklyLabel),
             .usageTrend(provider: provider)
                 .exportingHistory(
                     scope: .machineLocal,
