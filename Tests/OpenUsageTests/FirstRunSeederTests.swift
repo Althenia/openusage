@@ -141,11 +141,8 @@ final class FirstRunSeederTests: XCTestCase {
         CredentialStubProvider(id: id, hasCredentials: hasCredentials)
     }
 
-    private func makeDefaults(_ name: String) -> UserDefaults {
-        let suiteName = "OpenUsageTests.FirstRunSeeder.\(name).\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        return defaults
+    private func makeDefaults(_ name: String) -> AppPreferences {
+        TestPreferences.make(name)
     }
 }
 

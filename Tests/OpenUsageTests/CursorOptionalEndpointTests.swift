@@ -257,8 +257,7 @@ final class CursorOptionalEndpointTests: XCTestCase {
             usageClient: CursorUsageClient(http: RoutingHTTPClient(handler: handler)),
             now: { Date(timeIntervalSince1970: 1_800_000_000) },
             pricing: { TestPricing.bundled },
-            usageHistoryStore: CursorUsageHistoryStore(directory: FileManager.default.temporaryDirectory
-                .appendingPathComponent("cursor-optional-tests-\(UUID().uuidString)", isDirectory: true))
+            usageHistoryStore: CursorUsageHistoryStore(store: TestPreferences.makeStore("cursor-optional-tests"))
         )
     }
 

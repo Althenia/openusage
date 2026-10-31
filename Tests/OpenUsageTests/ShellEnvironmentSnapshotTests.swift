@@ -177,12 +177,8 @@ final class ShellEnvironmentSnapshotTests: XCTestCase {
         XCTAssertEqual(reader.value(for: "CODEX_HOME"), "/tmp/live")
     }
 
-    private func makeScratchDefaults() -> UserDefaults {
-        let suiteName = "OpenUsageTests.ShellEnvironmentSnapshot.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        addTeardownBlock { defaults.removePersistentDomain(forName: suiteName) }
-        return defaults
+    private func makeScratchDefaults() -> AppPreferences {
+        TestPreferences.make()
     }
 }
 

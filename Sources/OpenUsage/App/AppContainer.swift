@@ -56,7 +56,7 @@ final class AppContainer {
     private let shellEnvironmentSnapshotTask: Task<Void, Never>
 
     /// `isFreshInstall` must be captured by the caller BEFORE `SettingsMigrator.migrate()` runs (the
-    /// migrator's schema stamp makes the defaults domain non-empty). See `AppDelegate`.
+    /// migrator's schema stamp makes the SQLite settings namespace non-empty). See `AppDelegate`.
     init(isFreshInstall: Bool = false) async {
         // Capture the user's login-shell environment off-main so provider keys exported in a shell
         // profile (e.g. OPENROUTER_API_KEY) resolve in a Finder/Dock-launched build, not only when
@@ -174,7 +174,7 @@ final class AppContainer {
         })
 
         // Anonymous usage telemetry (mandatory daily activity and crashes, optional provider rollups).
-        // Its state lives in a dedicated UserDefaults suite, kept separate from app settings so the user's
+        // Its state lives in a dedicated preferences namespace (`AppPreferences.telemetry`), kept separate from app settings so the user's
         // optional-analytics choice and the install id stay independent of any settings change. The
         // snapshot closure reads the live layout/enablement so `app_daily_active` always reflects
         // the current configuration.
@@ -260,14 +260,20 @@ final class AppContainer {
         // Same as flipping the Settings toggle off: stops syncing and removes this Mac's document
         // from the shared iCloud container (peers keep their own history).
         iCloudSync.enabled = false
-        // Removing an `@AppStorage` key restores its declared default; the Settings screen's
-        // `@AppStorage` properties observe the change. New settings must be added here.
-        for key in [
+        // Removing a preference key restores its declared default; the Settings screen's
+        // `@SQLiteStorage` properties observe the change. New settings must be added here.
+        let settingKeys = [
             AppearanceSetting.key, TimeFormatSetting.key, DensitySetting.key,
             ReduceAnimationsSetting.key, LogLevelSetting.key, TotalSpendSetting.key,
             TotalSpendSetting.periodKey, TotalSpendSetting.metricKey,
-        ] {
-            UserDefaults.standard.removeObject(forKey: key)
+        ]
+        do {
+            try AppPreferences.standard.transaction { transactional in
+                for key in settingKeys { transactional.removeObject(forKey: key) }
+                try transactional.checkError()
+            }
+        } catch {
+            AppLog.error(.config, "failed to reset settings: \(error.localizedDescription)")
         }
         KeyboardShortcuts.reset(.togglePopover)
         AppearanceSetting.applyCurrent()
@@ -289,9 +295,8 @@ final class AppContainer {
     /// wake only hits the network for a provider whose snapshot has actually expired.
     ///
     /// The wake is deliberately scoped to `ProviderEnablementStore.didChangeNotification` — NOT the
-    /// firehose `UserDefaults.didChangeNotification`, which fires for the app's own snapshot-cache writes,
-    /// Sparkle's update bookkeeping, and unrelated global-domain changes from other processes. Waking on
-    /// that, with no minimum interval before re-refreshing, collapsed the fixed 5-minute cadence into a
+    /// firehose `AppPreferences.didChangeNotification`, which fires for every preference write, including
+    /// the app's own snapshot-cache writes. Waking on that, with no minimum interval before re-refreshing, collapsed the fixed 5-minute cadence into a
     /// refresh storm.
     private static func startPeriodicRefresh(dataStore: WidgetDataStore, telemetry: TelemetryRecorder) -> Task<Void, Never> {
         Task {

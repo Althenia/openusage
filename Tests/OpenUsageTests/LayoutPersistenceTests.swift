@@ -61,15 +61,12 @@ final class LayoutPersistenceTests: XCTestCase {
         XCTAssertEqual(defaults.string(forKey: "layout.menuBarStyle"), MenuBarStyle.bars.rawValue)
     }
 
-    private func decode<T: Decodable>(_ type: T.Type, key: String, defaults: UserDefaults) throws -> T {
+    private func decode<T: Decodable>(_ type: T.Type, key: String, defaults: AppPreferences) throws -> T {
         let data = try XCTUnwrap(defaults.data(forKey: key))
         return try JSONDecoder().decode(type, from: data)
     }
 
-    private func makeDefaults(_ name: String) -> UserDefaults {
-        let suite = "OpenUsageTests.LayoutPersistence.\(name).\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defaults.removePersistentDomain(forName: suite)
-        return defaults
+    private func makeDefaults(_ name: String) -> AppPreferences {
+        TestPreferences.make(name)
     }
 }

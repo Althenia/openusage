@@ -132,10 +132,7 @@ final class OllamaMonthlyUsageTests: XCTestCase {
         XCTAssertEqual(upgraded.pinnedMetricIDs, ["ollama.session"])
     }
 
-    private func makeDefaults() -> UserDefaults {
-        let suiteName = "OpenUsageTests.OllamaMonthly.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        addTeardownBlock { defaults.removePersistentDomain(forName: suiteName) }
-        return defaults
+    private func makeDefaults() -> AppPreferences {
+        TestPreferences.make()
     }
 }

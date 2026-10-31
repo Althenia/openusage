@@ -4,11 +4,13 @@ import XCTest
 
 final class JSONLScanCacheStoreTests: XCTestCase {
     private var base: URL!
+    private var store: SQLiteStore!
 
     override func setUpWithError() throws {
         base = FileManager.default.temporaryDirectory
             .appendingPathComponent("OpenUsageCacheTests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        store = try SQLiteStore(url: base.appendingPathComponent("cache.db"))
     }
 
     override func tearDownWithError() throws {
@@ -55,12 +57,11 @@ final class JSONLScanCacheStoreTests: XCTestCase {
 
         XCTAssertEqual(Set(snapshot.manifest.files.keys), Set([first.path, second.path]))
         for (file, expectedRecord) in [(first, "first-record"), (second, "second-record")] {
-            let recordURL = JSONLScanCachePaths.recordURL(
-                persistence: persistence,
-                identity: identity,
-                fileName: JSONLScanCachePaths.recordFileName(path: file.path)
+            XCTAssertEqual(
+                try recordData(persistence: persistence, identity: identity, fileName: JSONLScanCachePaths.recordFileName(path: file.path)),
+                Data(expectedRecord.utf8),
+                file.path
             )
-            XCTAssertEqual(try Data(contentsOf: recordURL), Data(expectedRecord.utf8), file.path)
         }
     }
 
@@ -114,12 +115,10 @@ final class JSONLScanCacheStoreTests: XCTestCase {
         let result = try await writer.commit(staleRemoval)
 
         XCTAssertEqual(result.manifest.files[newFile.path], newMetadata)
-        let recordURL = JSONLScanCachePaths.recordURL(
-            persistence: persistence,
-            identity: "home",
-            fileName: newMetadata.recordFileName
+        XCTAssertEqual(
+            try recordData(persistence: persistence, identity: "home", fileName: newMetadata.recordFileName),
+            Data("new-record".utf8)
         )
-        XCTAssertEqual(try Data(contentsOf: recordURL), Data("new-record".utf8))
     }
 
     func testLoadingAnOldIdentityTouchesItBeforeStalePruning() async throws {
@@ -136,24 +135,82 @@ final class JSONLScanCacheStoreTests: XCTestCase {
             file: file,
             recordData: Data("record".utf8)
         ))
-        let identityDirectory = JSONLScanCachePaths.identityDirectory(
-            persistence: persistence,
-            identity: "home"
-        )
-        let old = Date().addingTimeInterval(-JSONLScanCachePaths.staleIdentityRetention - 60)
-        try FileManager.default.setAttributes([.modificationDate: old], ofItemAtPath: identityDirectory.path)
+        let namespace = JSONLScanCachePaths.storeNamespace(persistence: persistence, identity: "home")
+        let written = try XCTUnwrap(try store.modifiedAt(namespace: namespace, key: JSONLScanCachePaths.manifestKey))
+        try await Task.sleep(for: .milliseconds(200))
 
         _ = try writer.load(
             persistence: persistence,
             identity: "home",
             itemType: Int.self
         )
+        let touched = try XCTUnwrap(try store.modifiedAt(namespace: namespace, key: JSONLScanCachePaths.manifestKey))
+        XCTAssertGreaterThan(touched, written)
         await writer.pruneStaleIdentities(
             persistence: persistence,
-            before: Date().addingTimeInterval(-JSONLScanCachePaths.staleIdentityRetention)
+            before: written.addingTimeInterval(touched.timeIntervalSince(written) / 2)
         )
 
-        XCTAssertTrue(FileManager.default.fileExists(atPath: identityDirectory.path))
+        XCTAssertEqual(try store.namespaces(prefix: namespace), [namespace])
+        XCTAssertNotNil(try store.data(namespace: namespace, key: JSONLScanCachePaths.manifestKey))
+    }
+
+    func testPruningRemovesOnlyIdentitiesOlderThanTheCutoffInTheSameParserNamespace() async throws {
+        let persistence = makePersistence()
+        let otherParser = JSONLScanCachePersistence(namespace: "other", schemaVersion: 1, store: store)
+        let file = try writeSource("value", to: base.appendingPathComponent("usage.jsonl"), mtime: Date())
+        let writer = JSONLScanCacheWriter()
+        _ = try await writer.commit(makeBatch(
+            persistence: persistence, identity: "old-home", file: file, recordData: Data("old".utf8)
+        ))
+        _ = try await writer.commit(makeBatch(
+            persistence: otherParser, identity: "old-home", file: file, recordData: Data("other".utf8)
+        ))
+        try await Task.sleep(for: .milliseconds(200))
+        let cutoff = Date()
+        try await Task.sleep(for: .milliseconds(200))
+        _ = try await writer.commit(makeBatch(
+            persistence: persistence, identity: "new-home", file: file, recordData: Data("new".utf8)
+        ))
+
+        await writer.pruneStaleIdentities(persistence: persistence, before: cutoff)
+
+        XCTAssertNil(try recordData(
+            persistence: persistence, identity: "old-home",
+            fileName: JSONLScanCachePaths.recordFileName(path: file.path)
+        ))
+        XCTAssertEqual(
+            try recordData(
+                persistence: persistence, identity: "new-home",
+                fileName: JSONLScanCachePaths.recordFileName(path: file.path)
+            ),
+            Data("new".utf8)
+        )
+        XCTAssertEqual(
+            try recordData(
+                persistence: otherParser, identity: "old-home",
+                fileName: JSONLScanCachePaths.recordFileName(path: file.path)
+            ),
+            Data("other".utf8)
+        )
+    }
+
+    func testCommitReplacesManifestAndDropsRecordsNoLongerReferenced() async throws {
+        let persistence = makePersistence()
+        let sourceURL = base.appendingPathComponent("usage.jsonl")
+        let old = try writeSource("old", to: sourceURL, mtime: Date(timeIntervalSince1970: 2_000))
+        let writer = JSONLScanCacheWriter()
+        let first = try await writer.commit(makeBatch(
+            persistence: persistence, identity: "home", file: old, recordData: Data("old-record".utf8)
+        ))
+        let oldMetadata = try XCTUnwrap(first.manifest.files[old.path])
+        let namespace = JSONLScanCachePaths.storeNamespace(persistence: persistence, identity: "home")
+
+        _ = try await writer.commit(JSONLScanCacheWriteBatch(
+            persistence: persistence, identity: "home", upserts: [:], removals: [old.path: oldMetadata]
+        ))
+
+        XCTAssertEqual(try store.namespaces(prefix: namespace), [])
     }
 
     func testFreshScannerCanPersistAfterAnotherScannerHasWrittenRepeatedly() async throws {
@@ -240,9 +297,13 @@ final class JSONLScanCacheStoreTests: XCTestCase {
             to: base.appendingPathComponent("usage.jsonl"),
             mtime: Date()
         )
-        let cacheDirectory = base.appendingPathComponent("cache")
-        try Data("blocks-directory-creation".utf8).write(to: cacheDirectory)
-        let persistence = makePersistence(writeDebounce: .milliseconds(1))
+        let blockedURL = base.appendingPathComponent("blocked.db")
+        let blockedStore = try SQLiteStore(url: blockedURL, busyTimeout: 0.05)
+        let persistence = JSONLScanCachePersistence(
+            namespace: "test", schemaVersion: 1, store: blockedStore, writeDebounce: .milliseconds(1)
+        )
+        let blocker = try RawSQLiteConnection(url: blockedURL)
+        try blocker.execute("BEGIN EXCLUSIVE")
         let scanner = IncrementalJSONLScanner<Int>(persistence: persistence)
         _ = await scanner.items(
             from: [file],
@@ -252,8 +313,8 @@ final class JSONLScanCacheStoreTests: XCTestCase {
         )
         await scanner.waitForPendingWritesForTesting()
 
-        // The failed debounce has no live task handle now, but its dirty source must still be drained.
-        try FileManager.default.removeItem(at: cacheDirectory)
+        try blocker.execute("ROLLBACK")
+        blocker.close()
         await scanner.flushPendingWrites()
 
         let reloadCounter = ParseCounter()
@@ -365,8 +426,19 @@ final class JSONLScanCacheStoreTests: XCTestCase {
         JSONLScanCachePersistence(
             namespace: "test",
             schemaVersion: 1,
-            directory: base.appendingPathComponent("cache"),
+            store: store,
             writeDebounce: writeDebounce
+        )
+    }
+
+    private func recordData(
+        persistence: JSONLScanCachePersistence,
+        identity: String,
+        fileName: String
+    ) throws -> Data? {
+        try store.data(
+            namespace: JSONLScanCachePaths.storeNamespace(persistence: persistence, identity: identity),
+            key: JSONLScanCachePaths.recordKey(fileName: fileName)
         )
     }
 

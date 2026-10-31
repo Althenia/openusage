@@ -28,9 +28,8 @@ final class ProviderEnablementStore {
 
     /// Posted when the enabled-provider set actually changes. The refresh loop listens for this to wake
     /// early and fetch a newly-enabled provider promptly, instead of waiting out the full interval —
-    /// WITHOUT subscribing to the firehose `UserDefaults.didChangeNotification`, which also fires for the
-    /// app's own snapshot-cache writes, Sparkle's update bookkeeping, and unrelated global-domain changes
-    /// from other processes. Waking on that (with no minimum interval) collapsed the fixed 5-minute
+    /// WITHOUT subscribing to `AppPreferences.didChangeNotification`, which also fires for the app's own
+    /// snapshot-cache writes. Waking on that (with no minimum interval) collapsed the fixed 5-minute
     /// cadence into a refresh storm.
     ///
     /// `nonisolated` so the refresh loop's background task can name it without hopping to the main actor
@@ -53,18 +52,18 @@ final class ProviderEnablementStore {
     /// Every provider ID this install has ever seen (see the type comment). Seeded by the v2 settings
     /// migration or `FirstRunSeeder`, then grown by `registerKnownProviders`.
     private(set) var knownIDs: Set<String>
-    private let defaults: UserDefaults
+    private let preferences: AppPreferences
 
-    init(defaults: UserDefaults = .standard) {
-        self.defaults = defaults
-        if let enabled = defaults.stringArray(forKey: Self.enabledStorageKey) {
+    init(defaults preferences: AppPreferences = .standard) {
+        self.preferences = preferences
+        if let enabled = preferences.stringArray(forKey: Self.enabledStorageKey) {
             self.enabledIDs = Set(enabled)
             self.disabledIDs = []
         } else {
             self.enabledIDs = nil
-            self.disabledIDs = Set(defaults.stringArray(forKey: Self.disabledStorageKey) ?? [])
+            self.disabledIDs = Set(preferences.stringArray(forKey: Self.disabledStorageKey) ?? [])
         }
-        self.knownIDs = Set(defaults.stringArray(forKey: Self.knownStorageKey) ?? [])
+        self.knownIDs = Set(preferences.stringArray(forKey: Self.knownStorageKey) ?? [])
     }
 
     func isEnabled(_ id: String) -> Bool {
@@ -78,7 +77,7 @@ final class ProviderEnablementStore {
             // A no-op toggle (re-setting the same value) shouldn't persist or wake the refresh loop.
             guard ids != enabledIDs else { return }
             enabledIDs = ids
-            defaults.set(Array(ids), forKey: Self.enabledStorageKey)
+            preferences.set(Array(ids), forKey: Self.enabledStorageKey)
         } else {
             let before = disabledIDs
             if enabled {
@@ -87,7 +86,7 @@ final class ProviderEnablementStore {
                 disabledIDs.insert(id)
             }
             guard disabledIDs != before else { return }
-            defaults.set(Array(disabledIDs), forKey: Self.disabledStorageKey)
+            preferences.set(Array(disabledIDs), forKey: Self.disabledStorageKey)
         }
         // Clear the backoff BEFORE the wake notification, so the refresh it triggers actually probes the
         // just-enabled provider instead of skipping it as recently-failed.
@@ -107,7 +106,7 @@ final class ProviderEnablementStore {
         let new = ids.subtracting(knownIDs)
         guard !new.isEmpty else { return [] }
         knownIDs.formUnion(new)
-        defaults.set(Array(knownIDs), forKey: Self.knownStorageKey)
+        preferences.set(Array(knownIDs), forKey: Self.knownStorageKey)
         return new
     }
 
@@ -116,7 +115,7 @@ final class ProviderEnablementStore {
         let changed = enabledIDs != ids
         enabledIDs = ids
         disabledIDs = []
-        defaults.set(Array(ids), forKey: Self.enabledStorageKey)
+        preferences.set(Array(ids), forKey: Self.enabledStorageKey)
         guard changed else { return }
         for id in newlyEnabled.sorted() { onProviderEnabled?(id) }
         onChange?()

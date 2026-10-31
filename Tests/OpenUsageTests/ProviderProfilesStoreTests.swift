@@ -5,7 +5,7 @@ import XCTest
 final class ProviderProfilesStoreTests: XCTestCase {
     private let folders: Set<String> = ["/Users/dev/claude-work", "/Users/dev/codex-work", "/Users/dev/other"]
 
-    private func makeStore(_ defaults: UserDefaults) -> ProviderProfilesStore {
+    private func makeStore(_ defaults: AppPreferences) -> ProviderProfilesStore {
         ProviderProfilesStore(defaults: defaults, directoryExists: { [folders] in folders.contains($0) })
     }
 

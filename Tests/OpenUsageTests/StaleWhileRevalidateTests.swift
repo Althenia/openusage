@@ -11,7 +11,7 @@ final class StaleWhileRevalidateTests: XCTestCase {
     func testExpiredSnapshotStillLoadsAtLaunchThenRefreshes() async {
         let provider = Self.testProvider
         let descriptor = Self.descriptor(provider, id: "test.alpha", metric: "Alpha")
-        let defaults = makeUserDefaults("stale-launch")
+        let defaults = makePreferences("stale-launch")
         let cache = ProviderSnapshotCache(userDefaults: defaults, storageKey: "snapshots", ttl: 600, now: { Date() })
 
         // Persist a snapshot that is well past the TTL (a relaunch hours later).
@@ -42,7 +42,7 @@ final class StaleWhileRevalidateTests: XCTestCase {
     func testFailedRefreshKeepsLastGoodSnapshotAndRecordsError() async {
         let provider = Self.testProvider
         let descriptor = Self.descriptor(provider, id: "test.alpha", metric: "Alpha")
-        let defaults = makeUserDefaults("error-keeps-stale")
+        let defaults = makePreferences("error-keeps-stale")
         let runtime = MutableProviderRuntime(
             provider: provider,
             descriptors: [descriptor],
@@ -88,7 +88,7 @@ final class StaleWhileRevalidateTests: XCTestCase {
         )
         let spend = WidgetDescriptor.spendTiles(provider: provider)
         let descriptors = [quota, trend] + spend
-        let defaults = makeUserDefaults("history-scan-miss")
+        let defaults = makePreferences("history-scan-miss")
         let fixedNow = Date(timeIntervalSince1970: 1_752_364_800)
         let history = ProviderUsageHistory(
             series: DailyUsageSeries(daily: [
@@ -146,7 +146,7 @@ final class StaleWhileRevalidateTests: XCTestCase {
         // menu-bar label (and re-run its ImageRenderer) every pass.
         let provider = Self.testProvider
         let descriptor = Self.descriptor(provider, id: "test.alpha", metric: "Alpha")
-        let defaults = makeUserDefaults("cache-hit-no-invalidation")
+        let defaults = makePreferences("cache-hit-no-invalidation")
         let cache = ProviderSnapshotCache(userDefaults: defaults, storageKey: "snapshots", ttl: 600, now: { Date() })
 
         // A fresh (within-TTL) cached snapshot, also loaded into `snapshots` by the store's init.
@@ -185,7 +185,7 @@ final class StaleWhileRevalidateTests: XCTestCase {
         // and the error indicator explains why.
         let provider = Self.testProvider
         let descriptor = Self.descriptor(provider, id: "test.alpha", metric: "Alpha")
-        let defaults = makeUserDefaults("error-no-data")
+        let defaults = makePreferences("error-no-data")
         let runtime = MutableProviderRuntime(
             provider: provider,
             descriptors: [descriptor],
@@ -206,7 +206,7 @@ final class StaleWhileRevalidateTests: XCTestCase {
     func testCancelledRefreshKeepsLastGoodHistoryAndSkipsPublication() async throws {
         let provider = Self.testProvider
         let descriptor = Self.descriptor(provider, id: "test.alpha", metric: "Alpha")
-        let defaults = makeUserDefaults("cancelled-history")
+        let defaults = makePreferences("cancelled-history")
         let history = ProviderUsageHistory(
             series: DailyUsageSeries(daily: [
                 DailyUsageEntry(date: "2026-07-17", totalTokens: 400, costUSD: 4)
@@ -264,7 +264,7 @@ final class StaleWhileRevalidateTests: XCTestCase {
     func testCompletedEmptyHistoryStillClearsLastGoodHistory() async throws {
         let provider = Self.testProvider
         let descriptor = Self.descriptor(provider, id: "test.alpha", metric: "Alpha")
-        let defaults = makeUserDefaults("completed-empty-history")
+        let defaults = makePreferences("completed-empty-history")
         let runtime = MutableProviderRuntime(
             provider: provider,
             descriptors: [descriptor],
@@ -338,7 +338,7 @@ final class StaleWhileRevalidateTests: XCTestCase {
         // write, a manual `defaults` edit) must recover to an empty cache rather than crash — and,
         // per the loud-fail rule, leave a warn. Previously `try?` dropped ALL providers' snapshots
         // silently, which is the load-side feeder of the refresh storm.
-        let defaults = makeUserDefaults("corrupt-cache")
+        let defaults = makePreferences("corrupt-cache")
         defaults.set(Data("not a valid snapshot payload".utf8), forKey: "snapshots")
         let cache = ProviderSnapshotCache(userDefaults: defaults, storageKey: "snapshots", ttl: 600, now: { Date() })
 
@@ -347,11 +347,8 @@ final class StaleWhileRevalidateTests: XCTestCase {
         XCTAssertTrue(loaded.isEmpty)
     }
 
-    private func makeUserDefaults(_ name: String) -> UserDefaults {
-        let suiteName = "OpenUsageTests.StaleWhileRevalidate.\(name).\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        return defaults
+    private func makePreferences(_ name: String) -> AppPreferences {
+        TestPreferences.make(name)
     }
 }
 

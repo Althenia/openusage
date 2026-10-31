@@ -75,7 +75,7 @@ final class RefreshTimeoutTests: XCTestCase {
         WidgetDataStore(
             registry: WidgetRegistry(providers: [provider], descriptors: [descriptor]),
             providers: [runtime],
-            defaults: makeUserDefaults("refresh-timeout"),
+            defaults: makePreferences("refresh-timeout"),
             providerRefreshTimeout: timeout
         )
     }
@@ -89,10 +89,7 @@ final class RefreshTimeoutTests: XCTestCase {
         return condition()
     }
 
-    private func makeUserDefaults(_ name: String) -> UserDefaults {
-        let suiteName = "OpenUsageTests.\(name).\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        return defaults
+    private func makePreferences(_ name: String) -> AppPreferences {
+        TestPreferences.make(name)
     }
 }

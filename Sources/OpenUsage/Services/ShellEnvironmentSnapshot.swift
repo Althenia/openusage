@@ -8,7 +8,7 @@ import Foundation
 /// from the next launch. Only a genuinely first launch (no snapshot yet) has nothing to pin.
 struct ShellEnvironmentSnapshot: Codable, Equatable, Sendable {
     /// Identity-relevant, non-secret configuration variables. Secrets (API keys, tokens) must never
-    /// be added here — the snapshot lives in UserDefaults as plain text.
+    /// be added here — the snapshot lives in the app preferences as plain text.
     static let capturedKeys = [
         "CLAUDE_CONFIG_DIR", "CODEX_HOME", "XDG_CONFIG_HOME", "XSWAP_HOME", "XDG_DATA_HOME",
         "USER_TYPE", "USE_LOCAL_OAUTH", "USE_STAGING_OAUTH",
@@ -36,8 +36,8 @@ struct ShellEnvironmentSnapshot: Codable, Equatable, Sendable {
     }
 }
 
-/// UserDefaults persistence for the snapshot (`openusage.shellEnvSnapshot.v2`). A class so the
-/// post-launch refresh task can carry it across actors; UserDefaults itself is thread-safe.
+/// Preferences persistence for the snapshot (`openusage.shellEnvSnapshot.v2`). A class so the
+/// post-launch refresh task can carry it across actors.
 final class ShellEnvironmentSnapshotStore: @unchecked Sendable {
     // v2 captures Swap location keys. Older snapshots cannot establish their absence; ignoring
     // them makes startup capture the shell before account discovery on the first upgraded launch.
@@ -45,22 +45,22 @@ final class ShellEnvironmentSnapshotStore: @unchecked Sendable {
 
     /// The snapshot as it existed at process start, decoded once and memoized (a `static let` is
     /// thread-safe lazy). `ProcessEnvironmentReader` consults this on every identity-key read, so it
-    /// must not re-hit UserDefaults each time. Deliberately frozen for the process lifetime — that
+    /// must not re-read the preferences store each time. Deliberately frozen for the process lifetime — that
     /// freeze IS the session pin; the refresh task's newer facts apply from the next launch.
     static let launchSnapshot: ShellEnvironmentSnapshot? =
         ShellEnvironmentSnapshotStore(defaults: .standard).load()
 
-    private let defaults: UserDefaults
+    private let preferences: AppPreferences
 
-    init(defaults: UserDefaults) {
-        self.defaults = defaults
+    init(defaults preferences: AppPreferences) {
+        self.preferences = preferences
     }
 
     func load() -> ShellEnvironmentSnapshot? {
-        guard let data = defaults.data(forKey: Self.storageKey) else { return nil }
+        guard let data = preferences.data(forKey: Self.storageKey) else { return nil }
         guard let snapshot = try? JSONDecoder().decode(ShellEnvironmentSnapshot.self, from: data) else {
             AppLog.warn(.config, "shell-environment snapshot was undecodable; discarding it")
-            defaults.removeObject(forKey: Self.storageKey)
+            preferences.removeObject(forKey: Self.storageKey)
             return nil
         }
         return snapshot
@@ -71,7 +71,7 @@ final class ShellEnvironmentSnapshotStore: @unchecked Sendable {
             AppLog.error(.config, "failed to encode shell-environment snapshot; keeping the previous one")
             return
         }
-        defaults.set(data, forKey: Self.storageKey)
+        preferences.set(data, forKey: Self.storageKey)
     }
 
     /// Wait (off-main, bounded by the capture's own subprocess timeout) for the login-shell capture

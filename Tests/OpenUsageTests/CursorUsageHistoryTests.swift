@@ -117,8 +117,7 @@ final class CursorUsageHistoryTests: XCTestCase {
     private let token = makeCursorJWT(sub: "google-oauth2|cursor-history-user")
 
     func testBackfillPublishesThirtyDaysOfSpendAndWritesTheCache() async throws {
-        let (store, directory) = makeStore()
-        defer { try? FileManager.default.removeItem(at: directory) }
+        let (store, backing) = makeStore()
         let now = self.now
         let dayStarts = dayStarts(now: now)
         let http = historyHTTP { request in
@@ -161,12 +160,11 @@ final class CursorUsageHistoryTests: XCTestCase {
         XCTAssertEqual(savedDays.count, 30)
         XCTAssertFalse(try XCTUnwrap(savedDays[dayStarts[0].key]).isComplete)
         XCTAssertTrue(try XCTUnwrap(savedDays[dayStarts[1].key]).isComplete)
-        XCTAssertTrue((try FileManager.default.contentsOfDirectory(atPath: directory.path)).contains { $0.hasSuffix(".json") })
+        XCTAssertEqual(try backing.keys(namespace: "cursor-usage-history").count, 1)
     }
 
     func testIncrementalRefreshOnlyRequestsTodayAndYesterday() async throws {
-        let (store, directory) = makeStore()
-        defer { try? FileManager.default.removeItem(at: directory) }
+        let (store, _) = makeStore()
         let now = self.now
         let cachedDays = cachedHistory(now: now)
         store.save(cachedDays, userID: userID, timeZone: Calendar.current.timeZone.identifier)
@@ -189,8 +187,7 @@ final class CursorUsageHistoryTests: XCTestCase {
     }
 
     func testRefetchesIncompleteOlderDayAndPublishesFinalizedTotals() async throws {
-        let (store, directory) = makeStore()
-        defer { try? FileManager.default.removeItem(at: directory) }
+        let (store, _) = makeStore()
         let now = self.now
         let dayStarts = dayStarts(now: now)
         let incompleteDay = dayStarts[5]
@@ -230,8 +227,7 @@ final class CursorUsageHistoryTests: XCTestCase {
     }
 
     func testIncompleteSecondPageKeepsPreviouslyCachedDayAndPublishesHistory() async throws {
-        let (store, directory) = makeStore()
-        defer { try? FileManager.default.removeItem(at: directory) }
+        let (store, _) = makeStore()
         let now = self.now
         let days = dayStarts(now: now)
         let todayKey = days[0].key
@@ -272,8 +268,7 @@ final class CursorUsageHistoryTests: XCTestCase {
     }
 
     func testDeadlineKeepsFastDaysAndNextRefreshCompletesBackfill() async throws {
-        let (store, directory) = makeStore()
-        defer { try? FileManager.default.removeItem(at: directory) }
+        let (store, _) = makeStore()
         let now = self.now
         let nowStart = Calendar.current.startOfDay(for: now)
         let slowHTTP = historyHTTP { request in
@@ -315,8 +310,7 @@ final class CursorUsageHistoryTests: XCTestCase {
     }
 
     func testAccountCacheIsolation() async throws {
-        let (store, directory) = makeStore()
-        defer { try? FileManager.default.removeItem(at: directory) }
+        let (store, _) = makeStore()
         let now = self.now
         store.save(cachedHistory(now: now), userID: "account-a", timeZone: Calendar.current.timeZone.identifier)
         let http = historyHTTP { _ in
@@ -337,8 +331,7 @@ final class CursorUsageHistoryTests: XCTestCase {
     }
 
     func testHTTPFailureLeavesMissingDayUnstoredAndKeepsExistingFileUnchanged() async throws {
-        let (store, directory) = makeStore()
-        defer { try? FileManager.default.removeItem(at: directory) }
+        let (store, backing) = makeStore()
         let now = self.now
         let dayStarts = dayStarts(now: now)
         let todayKey = dayStarts[0].key
@@ -362,11 +355,8 @@ final class CursorUsageHistoryTests: XCTestCase {
 
         let cached = cachedHistory(now: now)
         store.save(cached, userID: userID, timeZone: Calendar.current.timeZone.identifier)
-        let fileURL = try XCTUnwrap((try FileManager.default.contentsOfDirectory(
-            at: directory,
-            includingPropertiesForKeys: nil
-        )).first)
-        let originalFile = try Data(contentsOf: fileURL)
+        let historyKey = try XCTUnwrap(try backing.keys(namespace: "cursor-usage-history").first)
+        let originalFile = try XCTUnwrap(try backing.data(namespace: "cursor-usage-history", key: historyKey))
         let failedRefreshHTTP = historyHTTP { request in
             guard let params = CursorHistoryTestData.parameters(request),
                   params.startKey == dayStarts[0].key || params.startKey == dayStarts[1].key
@@ -380,13 +370,12 @@ final class CursorUsageHistoryTests: XCTestCase {
         let retained = await failedRefresh.refresh(accessToken: token, userID: userID, now: now)
 
         XCTAssertEqual(retained?.count, 30)
-        XCTAssertEqual(try Data(contentsOf: fileURL), originalFile)
+        XCTAssertEqual(try backing.data(namespace: "cursor-usage-history", key: historyKey), originalFile)
     }
 
-    private func makeStore() -> (CursorUsageHistoryStore, URL) {
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cursor-usage-history-tests-\(UUID().uuidString)", isDirectory: true)
-        return (CursorUsageHistoryStore(directory: directory), directory)
+    private func makeStore() -> (CursorUsageHistoryStore, SQLiteStore) {
+        let backing = TestPreferences.makeStore("cursorHistory")
+        return (CursorUsageHistoryStore(store: backing), backing)
     }
 
     private func makeProvider(

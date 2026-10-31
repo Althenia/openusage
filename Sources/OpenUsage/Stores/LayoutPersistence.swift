@@ -1,21 +1,21 @@
 import Foundation
 
-/// The saved half of `LayoutStore`. It owns the key names, encoding, and UserDefaults access so the
+/// The saved half of `LayoutStore`. It owns the key names, encoding, and preferences access so the
 /// live store can focus on layout rules and user actions.
 @MainActor
 final class LayoutPersistence {
-    private let defaults: UserDefaults
+    private let preferences: AppPreferences
     private let keys: Keys
 
-    init(defaults: UserDefaults, storageKey: String) {
-        self.defaults = defaults
+    init(defaults preferences: AppPreferences, storageKey: String) {
+        self.preferences = preferences
         self.keys = Keys(storageKey: storageKey)
     }
 
     /// Presence is separate from successful decoding. Existing-but-unreadable data is still an existing
     /// layout, so startup must not mistake corruption for a fresh install and apply fresh-only defaults.
-    var hasStoredLayout: Bool { defaults.data(forKey: keys.placed) != nil }
-    var hasStoredSeededDefaults: Bool { defaults.data(forKey: keys.seededDefaults) != nil }
+    var hasStoredLayout: Bool { preferences.data(forKey: keys.placed) != nil }
+    var hasStoredSeededDefaults: Bool { preferences.data(forKey: keys.seededDefaults) != nil }
 
     func loadPlaced() -> [PlacedWidget]? { decode([PlacedWidget].self, forKey: keys.placed) }
     func loadProviderOrder() -> [String]? { decode([String].self, forKey: keys.providerOrder) }
@@ -24,11 +24,11 @@ final class LayoutPersistence {
     }
     func loadSeededDefaults() -> [String]? { decode([String].self, forKey: keys.seededDefaults) }
 
-    func loadPins() -> [String]? { defaults.stringArray(forKey: keys.pins) }
-    func loadExpandedMetrics() -> [String]? { defaults.stringArray(forKey: keys.expandedMetrics) }
-    func loadExpandOnEnable() -> [String]? { defaults.stringArray(forKey: keys.expandOnEnable) }
-    func loadExpandedProviders() -> [String]? { defaults.stringArray(forKey: keys.expandedProviders) }
-    func loadMenuBarStyle() -> MenuBarStyle { defaults.enumValue(forKey: keys.menuBarStyle, default: .text) }
+    func loadPins() -> [String]? { preferences.stringArray(forKey: keys.pins) }
+    func loadExpandedMetrics() -> [String]? { preferences.stringArray(forKey: keys.expandedMetrics) }
+    func loadExpandOnEnable() -> [String]? { preferences.stringArray(forKey: keys.expandOnEnable) }
+    func loadExpandedProviders() -> [String]? { preferences.stringArray(forKey: keys.expandedProviders) }
+    func loadMenuBarStyle() -> MenuBarStyle { preferences.enumValue(forKey: keys.menuBarStyle, default: .text) }
 
     func savePlaced(_ value: [PlacedWidget]) { encode(value, forKey: keys.placed) }
     func saveProviderOrder(_ value: [String]) { encode(value, forKey: keys.providerOrder) }
@@ -37,24 +37,24 @@ final class LayoutPersistence {
         encode(Array(value).sorted(), forKey: keys.seededDefaults)
     }
 
-    func savePins(_ value: Set<String>) { defaults.set(Array(value), forKey: keys.pins) }
+    func savePins(_ value: Set<String>) { preferences.set(Array(value), forKey: keys.pins) }
     func saveExpandedMetrics(_ value: Set<String>) {
-        defaults.set(Array(value), forKey: keys.expandedMetrics)
+        preferences.set(Array(value), forKey: keys.expandedMetrics)
     }
     func saveExpandOnEnable(_ value: Set<String>) {
-        defaults.set(Array(value), forKey: keys.expandOnEnable)
+        preferences.set(Array(value), forKey: keys.expandOnEnable)
     }
     func saveExpandedProviders(_ value: Set<String>) {
-        defaults.set(Array(value), forKey: keys.expandedProviders)
+        preferences.set(Array(value), forKey: keys.expandedProviders)
     }
     func saveMenuBarStyle(_ value: MenuBarStyle) {
-        defaults.set(value.rawValue, forKey: keys.menuBarStyle)
+        preferences.set(value.rawValue, forKey: keys.menuBarStyle)
     }
 
     /// Fail loudly: a swallowed encode would silently lose a layout change with no signal.
     private func encode<T: Encodable>(_ value: T, forKey key: String) {
         do {
-            defaults.set(try JSONEncoder().encode(value), forKey: key)
+            preferences.set(try JSONEncoder().encode(value), forKey: key)
         } catch {
             AppLog.warn(.config, "failed to persist layout '\(key)': \(error.localizedDescription)")
         }
@@ -63,7 +63,7 @@ final class LayoutPersistence {
     /// Missing data is a normal first launch. Present-but-unreadable data is logged before startup uses
     /// its normal fallback, so a damaged saved layout is never silently hidden.
     private func decode<T: Decodable>(_ type: T.Type, forKey key: String) -> T? {
-        guard let data = defaults.data(forKey: key) else { return nil }
+        guard let data = preferences.data(forKey: key) else { return nil }
         do {
             return try JSONDecoder().decode(type, from: data)
         } catch {

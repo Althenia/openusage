@@ -3,6 +3,8 @@ import XCTest
 @testable import OpenUsage
 
 final class IncrementalJSONLScannerTests: XCTestCase {
+    private var stores: [String: SQLiteStore] = [:]
+
     func testPersistedCacheSurvivesFreshScannerInstanceAndIsScopedByIdentity() async throws {
         let base = try makeDirectory("Persistence")
         defer { try? FileManager.default.removeItem(at: base) }
@@ -152,13 +154,16 @@ final class IncrementalJSONLScannerTests: XCTestCase {
         )
         await scanner.waitForPendingWritesForTesting()
 
-        let firstRecordValue = await scanner.cacheRecordURLForTesting(identity: "home", filePath: firstFile.path)
-        let secondRecordValue = await scanner.cacheRecordURLForTesting(identity: "home", filePath: secondFile.path)
-        let firstRecord = try XCTUnwrap(firstRecordValue)
-        let secondRecord = try XCTUnwrap(secondRecordValue)
-        let sentinel = Date(timeIntervalSince1970: 1_000_000)
-        try FileManager.default.setAttributes([.modificationDate: sentinel], ofItemAtPath: firstRecord.path)
-        try FileManager.default.setAttributes([.modificationDate: sentinel], ofItemAtPath: secondRecord.path)
+        let firstLocationValue = await scanner.cacheRecordLocationForTesting(identity: "home", filePath: firstFile.path)
+        let secondLocationValue = await scanner.cacheRecordLocationForTesting(identity: "home", filePath: secondFile.path)
+        let firstLocation = try XCTUnwrap(firstLocationValue)
+        let secondLocation = try XCTUnwrap(secondLocationValue)
+        let store = try XCTUnwrap(stores[base.path])
+        let firstBefore = try XCTUnwrap(try store.data(namespace: firstLocation.namespace, key: firstLocation.key))
+        let firstWritten = try XCTUnwrap(try store.modifiedAt(namespace: firstLocation.namespace, key: firstLocation.key))
+        let secondBefore = try XCTUnwrap(try store.data(namespace: secondLocation.namespace, key: secondLocation.key))
+        let secondWritten = try XCTUnwrap(try store.modifiedAt(namespace: secondLocation.namespace, key: secondLocation.key))
+        try await Task.sleep(for: .milliseconds(200))
 
         let changedURL = URL(fileURLWithPath: firstFile.path)
         try Data("11".utf8).write(to: changedURL)
@@ -177,10 +182,14 @@ final class IncrementalJSONLScannerTests: XCTestCase {
         )
         await scanner.waitForPendingWritesForTesting()
 
-        let firstMtime = try modificationDate(of: firstRecord)
-        let secondMtime = try modificationDate(of: secondRecord)
-        XCTAssertGreaterThan(firstMtime, sentinel)
-        XCTAssertEqual(secondMtime, sentinel, "an unchanged source record must not be rewritten")
+        let firstAfter = try XCTUnwrap(try store.data(namespace: firstLocation.namespace, key: firstLocation.key))
+        let firstRewritten = try XCTUnwrap(try store.modifiedAt(namespace: firstLocation.namespace, key: firstLocation.key))
+        let secondAfter = try XCTUnwrap(try store.data(namespace: secondLocation.namespace, key: secondLocation.key))
+        let secondRewritten = try XCTUnwrap(try store.modifiedAt(namespace: secondLocation.namespace, key: secondLocation.key))
+        XCTAssertNotEqual(firstAfter, firstBefore)
+        XCTAssertGreaterThan(firstRewritten, firstWritten)
+        XCTAssertEqual(secondAfter, secondBefore)
+        XCTAssertEqual(secondRewritten, secondWritten, "an unchanged source record must not be rewritten")
     }
 
     func testDisjointScansSharingIdentityKeepEachOthersParsedFiles() async throws {
@@ -229,18 +238,24 @@ final class IncrementalJSONLScannerTests: XCTestCase {
         _ = await scanner.items(from: [file], since: .distantPast, cacheIdentity: "old-home", parse: ParseCounter().parse)
         await scanner.waitForPendingWritesForTesting()
 
-        let identityDirectory = JSONLScanCachePaths.identityDirectory(
-            persistence: persistence,
-            identity: "old-home"
-        )
-        let old = Date().addingTimeInterval(-JSONLScanCachePaths.staleIdentityRetention - 60)
-        try FileManager.default.setAttributes([.modificationDate: old], ofItemAtPath: identityDirectory.path)
+        let store = try XCTUnwrap(stores[base.path])
+        let namespace = JSONLScanCachePaths.storeNamespace(persistence: persistence, identity: "old-home")
+        let written = try XCTUnwrap(try store.modifiedAt(namespace: namespace, key: JSONLScanCachePaths.manifestKey))
+        XCTAssertFalse(try store.keys(namespace: namespace).isEmpty)
+
         await JSONLScanCacheWriter.shared.pruneStaleIdentities(
             persistence: persistence,
-            before: Date().addingTimeInterval(-JSONLScanCachePaths.staleIdentityRetention)
+            before: written.addingTimeInterval(-1)
+        )
+        XCTAssertNotNil(try store.data(namespace: namespace, key: JSONLScanCachePaths.manifestKey))
+
+        await JSONLScanCacheWriter.shared.pruneStaleIdentities(
+            persistence: persistence,
+            before: written.addingTimeInterval(1)
         )
 
-        XCTAssertFalse(FileManager.default.fileExists(atPath: identityDirectory.path))
+        XCTAssertNil(try store.data(namespace: namespace, key: JSONLScanCachePaths.manifestKey))
+        XCTAssertEqual(try store.namespaces(prefix: namespace), [])
     }
 
     func testConcurrentScansOfSameIdentityParseEachFileOnce() async throws {
@@ -438,10 +453,12 @@ final class IncrementalJSONLScannerTests: XCTestCase {
     }
 
     private func makePersistence(in directory: URL, schemaVersion: Int = 1) -> JSONLScanCachePersistence {
-        JSONLScanCachePersistence(
+        let store = stores[directory.path] ?? TestPreferences.makeStore("scanner")
+        stores[directory.path] = store
+        return JSONLScanCachePersistence(
             namespace: "test",
             schemaVersion: schemaVersion,
-            directory: directory.appendingPathComponent("cache"),
+            store: store,
             writeDebounce: .milliseconds(1)
         )
     }
@@ -461,10 +478,6 @@ final class IncrementalJSONLScannerTests: XCTestCase {
         )
     }
 
-    private func modificationDate(of url: URL) throws -> Date {
-        let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
-        return try XCTUnwrap(attributes[.modificationDate] as? Date)
-    }
 }
 
 private final class BatchSizeProbe: @unchecked Sendable {

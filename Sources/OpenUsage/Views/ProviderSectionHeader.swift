@@ -27,7 +27,7 @@ struct ProviderSectionHeader: View {
 
     /// Header type and icon track the density setting like the rows do, so Compact shrinks the
     /// whole section anatomy — not just the rows under it.
-    @AppStorage(DensitySetting.key) private var density = DensitySetting.regular
+    @SQLiteStorage(DensitySetting.key) private var density = DensitySetting.regular
     /// Party easter egg: pulse the provider mark. Off by default everywhere else.
     @Environment(\.popoverPartyMode) private var partyMode
     @State private var isHovered = false
@@ -111,7 +111,7 @@ struct ProviderSectionHeader: View {
 struct ProviderPlanBadge: View {
     let plan: String
 
-    @AppStorage(DensitySetting.key) private var density = DensitySetting.regular
+    @SQLiteStorage(DensitySetting.key) private var density = DensitySetting.regular
 
     var body: some View {
         // Plain text — no pill/capsule — for a cleaner header. Secondary (not tertiary): the plan

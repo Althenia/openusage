@@ -3,7 +3,7 @@ import SwiftUI
 
 struct ProfilesSettingsSection: View {
     @Bindable var store: ProviderProfilesStore
-    @AppStorage(DensitySetting.key) private var density = DensitySetting.regular
+    @SQLiteStorage(DensitySetting.key) private var density = DensitySetting.regular
 
     @State private var draftFamily: ProviderProfile.Family?
     @State private var draftName = ""

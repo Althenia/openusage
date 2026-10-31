@@ -3,7 +3,7 @@ import XCTest
 
 /// Covers the level setting's release default reconciliation (the issue says Info, not the Tauri
 /// runtime's Error), raw-value parsing, the fallback for unrecognized/dropped values (`off`/`trace`),
-/// and the severity ordering the file-sink gate relies on. Hermetic per-test `UserDefaults` suites
+/// and the severity ordering the file-sink gate relies on. Hermetic per-test preferences stores
 /// keep a real persisted `logLevel` from leaking in.
 final class LogLevelSettingTests: XCTestCase {
     func testDefaultIsInfoWhenUnset() {
@@ -56,10 +56,7 @@ final class LogLevelSettingTests: XCTestCase {
         XCTAssertEqual(LogLevelSetting.debug.label, "Debug")
     }
 
-    private func makeDefaults(_ name: String) -> UserDefaults {
-        let suiteName = "OpenUsageTests.LogLevel.\(name).\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        return defaults
+    private func makeDefaults(_ name: String) -> AppPreferences {
+        TestPreferences.make(name)
     }
 }

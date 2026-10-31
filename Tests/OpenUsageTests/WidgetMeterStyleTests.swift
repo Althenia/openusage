@@ -99,7 +99,7 @@ final class WidgetMeterStyleTests: XCTestCase {
                 ])]
             )
         )
-        let isolated = makeUserDefaults("unbounded")
+        let isolated = makePreferences("unbounded")
         let store = WidgetDataStore(
             registry: WidgetRegistry(providers: [provider], descriptors: [descriptor]),
             providers: [runtime],
@@ -121,15 +121,12 @@ final class WidgetMeterStyleTests: XCTestCase {
     }
 
     func testMeterStyleDefaultsToRemainingWithEmptySuite() {
-        let store = makeEmptyStore(makeUserDefaults("default"))
+        let store = makeEmptyStore(makePreferences("default"))
         XCTAssertEqual(store.meterStyle, .remaining)
     }
 
     func testMeterStylePersistsAcrossStoreInstances() {
-        let suiteName = "OpenUsageTests.MeterStyle.persist.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let defaults = TestPreferences.make()
 
         let store = makeEmptyStore(defaults)
         XCTAssertEqual(store.meterStyle, .remaining)
@@ -191,7 +188,7 @@ final class WidgetMeterStyleTests: XCTestCase {
                 lines: [.progress(label: "Metric", used: used, limit: limit, format: format)]
             )
         )
-        let isolated = makeUserDefaults(suite)
+        let isolated = makePreferences(suite)
         let store = WidgetDataStore(
             registry: WidgetRegistry(providers: [provider], descriptors: [descriptor]),
             providers: [runtime],
@@ -201,7 +198,7 @@ final class WidgetMeterStyleTests: XCTestCase {
         return (store, descriptor)
     }
 
-    private func makeEmptyStore(_ defaults: UserDefaults) -> WidgetDataStore {
+    private func makeEmptyStore(_ defaults: AppPreferences) -> WidgetDataStore {
         WidgetDataStore(
             registry: WidgetRegistry(providers: [], descriptors: []),
             providers: [],
@@ -210,14 +207,11 @@ final class WidgetMeterStyleTests: XCTestCase {
         )
     }
 
-    private func makeCache(_ defaults: UserDefaults) -> ProviderSnapshotCache {
+    private func makeCache(_ defaults: AppPreferences) -> ProviderSnapshotCache {
         ProviderSnapshotCache(userDefaults: defaults, storageKey: "snapshots", ttl: 600, now: { Date() })
     }
 
-    private func makeUserDefaults(_ name: String) -> UserDefaults {
-        let suiteName = "OpenUsageTests.MeterStyle.\(name).\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        return defaults
+    private func makePreferences(_ name: String) -> AppPreferences {
+        TestPreferences.make(name)
     }
 }

@@ -13,7 +13,7 @@ final class ClaudeLaunchSnapshotTests: XCTestCase {
     private let path = "/tmp/claude/.credentials.json"
 
     func testRelaunchRateLimitKeepsVerifiedLaunchLimitsWithNoteAndWarning() async {
-        let defaults = makeUserDefaults("relaunch")
+        let defaults = makePreferences("relaunch")
         let cache = ProviderSnapshotCache(userDefaults: defaults, storageKey: "snapshots", ttl: 600, now: { Self.now })
         cache.store(launchSnapshot(), producedByIdentityKey: Self.identity)
         let fixture = makeFixture { request in
@@ -55,7 +55,7 @@ final class ClaudeLaunchSnapshotTests: XCTestCase {
     }
 
     func testLaunchSnapshotStampedByAnotherAccountIsNotAdopted() {
-        let defaults = makeUserDefaults("other-account")
+        let defaults = makePreferences("other-account")
         let cache = ProviderSnapshotCache(userDefaults: defaults, storageKey: "snapshots", ttl: 600, now: { Self.now })
         cache.store(launchSnapshot(), producedByIdentityKey: "other-account|other-org")
         cache.store(launchSnapshot(providerID: "claude-unresolved"), producedByIdentityKey: Self.identity)
@@ -223,12 +223,8 @@ final class ClaudeLaunchSnapshotTests: XCTestCase {
         )
     }
 
-    private func makeUserDefaults(_ name: String) -> UserDefaults {
-        let suiteName = "ClaudeLaunchSnapshotTests.\(name).\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        addTeardownBlock { defaults.removePersistentDomain(forName: suiteName) }
-        return defaults
+    private func makePreferences(_ name: String) -> AppPreferences {
+        TestPreferences.make(name)
     }
 
     private nonisolated static func credentials(access: String, refresh: String) -> String {

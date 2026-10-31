@@ -18,10 +18,7 @@ struct OpenUsageCLI {
                 return
             }
 
-            guard let defaults = UserDefaults(suiteName: app.bundleIdentifier) else {
-                throw CLIError.appDefaultsUnavailable
-            }
-            let result = try await UsageReader(userDefaults: defaults).read(
+            let result = try await UsageReader(bundleIdentifier: app.bundleIdentifier).read(
                 providerID: arguments.providerID,
                 force: arguments.force
             )
@@ -33,8 +30,6 @@ struct OpenUsageCLI {
             }
         } catch CLIError.usage(let message) {
             fail("\(message)\nRun 'openusage --help' for usage.", code: 2)
-        } catch CLIError.appDefaultsUnavailable {
-            fail("Could not open the OpenUsage settings domain.", code: 4)
         } catch UsageReaderError.unknownProvider(let providerID) {
             fail("Unknown provider: \(providerID)", code: 2)
         } catch {

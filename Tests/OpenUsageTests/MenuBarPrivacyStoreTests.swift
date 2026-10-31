@@ -7,18 +7,15 @@ import XCTest
 @MainActor
 final class MenuBarPrivacyStoreTests: XCTestCase {
     /// Isolated, throwaway defaults per test (pattern from `PopoverTransparencyStoreTests`).
-    private func makeDefaults(_ name: String) -> UserDefaults {
-        let suiteName = "OpenUsageTests.MenuBarPrivacy.\(name).\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        return defaults
+    private func makeDefaults(_ name: String) -> AppPreferences {
+        TestPreferences.make(name)
     }
 
     /// A store with the capture probe pinned to `captured`'s live value and notifications stubbed out,
     /// so tests never touch the real window server.
     private func makeStore(
         _ name: String,
-        defaults: UserDefaults? = nil,
+        defaults: AppPreferences? = nil,
         captured: @escaping @MainActor () -> Bool
     ) -> MenuBarPrivacyStore {
         MenuBarPrivacyStore(

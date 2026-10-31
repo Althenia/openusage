@@ -17,12 +17,12 @@ struct SettingsScreen: View {
 
     @State private var launchAtLogin = LaunchAtLoginSetting()
     @State private var commandLineTool = CommandLineToolInstaller()
-    @AppStorage(TotalSpendSetting.key) private var showTotalSpend = true
-    @AppStorage(AppearanceSetting.key) private var appearance = AppearanceSetting.system
-    @AppStorage(TimeFormatSetting.key) private var timeFormat = TimeFormatSetting.auto
-    @AppStorage(DensitySetting.key) private var density = DensitySetting.regular
-    @AppStorage(ReduceAnimationsSetting.key) private var reduceAnimations = ReduceAnimationsSetting.fallback
-    @AppStorage(LogLevelSetting.key) private var logLevel = LogLevelSetting.fallback
+    @SQLiteStorage(TotalSpendSetting.key) private var showTotalSpend = true
+    @SQLiteStorage(AppearanceSetting.key) private var appearance = AppearanceSetting.system
+    @SQLiteStorage(TimeFormatSetting.key) private var timeFormat = TimeFormatSetting.auto
+    @SQLiteStorage(DensitySetting.key) private var density = DensitySetting.regular
+    @SQLiteStorage(ReduceAnimationsSetting.key) private var reduceAnimations = ReduceAnimationsSetting.fallback
+    @SQLiteStorage(LogLevelSetting.key) private var logLevel = LogLevelSetting.fallback
     /// Surfaced under the Advanced rows when copying the path or revealing the file fails.
     @State private var logActionError: String?
     /// macOS notification authorization for OpenUsage, surfaced in the Notifications section so a

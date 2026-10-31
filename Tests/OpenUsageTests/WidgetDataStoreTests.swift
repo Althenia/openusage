@@ -30,7 +30,7 @@ final class WidgetDataStoreTests: XCTestCase {
         let registry = WidgetRegistry(providers: [provider], descriptors: [descriptor])
         // Hermetic: pin the meter style via an isolated suite so a persisted `.used` in `.standard`
         // can't flip the expected "remaining" output.
-        let store = WidgetDataStore(registry: registry, providers: [runtime], defaults: makeUserDefaults("resolve-progress"))
+        let store = WidgetDataStore(registry: registry, providers: [runtime], defaults: makePreferences("resolve-progress"))
 
         await store.refreshAll()
         let data = store.data(for: descriptor)
@@ -66,7 +66,7 @@ final class WidgetDataStoreTests: XCTestCase {
         let store = WidgetDataStore(
             registry: WidgetRegistry(providers: [provider], descriptors: [meter]),
             providers: [runtime],
-            defaults: makeUserDefaults("soft-warning")
+            defaults: makePreferences("soft-warning")
         )
 
         await store.refreshAll()
@@ -103,7 +103,7 @@ final class WidgetDataStoreTests: XCTestCase {
         let store = WidgetDataStore(
             registry: WidgetRegistry(providers: [provider], descriptors: [meter]),
             providers: [runtime],
-            defaults: makeUserDefaults("header-notice")
+            defaults: makePreferences("header-notice")
         )
 
         await store.refreshAll(force: true)  // success with warning
@@ -183,7 +183,7 @@ final class WidgetDataStoreTests: XCTestCase {
                 lines: [.values(label: "Credits", values: CodexUsageMapper.creditValues(remaining: 1000))]
             )
         )
-        let defaults = makeUserDefaults("codex-credits")
+        let defaults = makePreferences("codex-credits")
         let store = WidgetDataStore(
             registry: WidgetRegistry(providers: [provider], descriptors: [descriptor]),
             providers: [runtime],
@@ -227,7 +227,7 @@ final class WidgetDataStoreTests: XCTestCase {
                                 values: [MetricValue(number: 1, kind: .count, label: "available")])]
             )
         )
-        let defaults = makeUserDefaults("codex-resets")
+        let defaults = makePreferences("codex-resets")
         let store = WidgetDataStore(
             registry: WidgetRegistry(providers: [provider], descriptors: [descriptor]),
             providers: [runtime],
@@ -265,7 +265,7 @@ final class WidgetDataStoreTests: XCTestCase {
                                 values: [MetricValue(number: 0, kind: .count, label: "available")])]
             )
         )
-        let defaults = makeUserDefaults("codex-resets-empty")
+        let defaults = makePreferences("codex-resets-empty")
         let store = WidgetDataStore(
             registry: WidgetRegistry(providers: [provider], descriptors: [descriptor]),
             providers: [runtime],
@@ -305,7 +305,7 @@ final class WidgetDataStoreTests: XCTestCase {
                 ]
             )
         )
-        let defaults = makeUserDefaults("cursor-tray-units")
+        let defaults = makePreferences("cursor-tray-units")
         let store = WidgetDataStore(
             registry: WidgetRegistry(providers: [provider], descriptors: [budget, requests]),
             providers: [runtime],
@@ -340,7 +340,7 @@ final class WidgetDataStoreTests: XCTestCase {
                 lines: [.values(label: "Credits", values: [MetricValue(number: 7_909.64, kind: .dollars)])]
             )
         )
-        let defaults = makeUserDefaults("cursor-credits-balance")
+        let defaults = makePreferences("cursor-credits-balance")
         let store = WidgetDataStore(
             registry: WidgetRegistry(providers: [provider], descriptors: [descriptor]),
             providers: [runtime],
@@ -381,7 +381,7 @@ final class WidgetDataStoreTests: XCTestCase {
                                 values: [MetricValue(number: 1234.56, kind: .dollars)])]
             )
         )
-        let defaults = makeUserDefaults("claude-extra")
+        let defaults = makePreferences("claude-extra")
         let store = WidgetDataStore(
             registry: WidgetRegistry(providers: [provider], descriptors: [descriptor]),
             providers: [runtime],
@@ -453,7 +453,7 @@ final class WidgetDataStoreTests: XCTestCase {
         )
         let registry = WidgetRegistry(providers: [provider], descriptors: descriptors)
         let cache = ProviderSnapshotCache(
-            userDefaults: makeUserDefaults("local-estimate"),
+            userDefaults: makePreferences("local-estimate"),
             storageKey: "snapshots",
             ttl: 600,
             now: { Date() }
@@ -532,7 +532,7 @@ final class WidgetDataStoreTests: XCTestCase {
         )
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let cache = ProviderSnapshotCache(
-            userDefaults: makeUserDefaults("fresh-cache"),
+            userDefaults: makePreferences("fresh-cache"),
             storageKey: "snapshots",
             ttl: 600,
             now: { now }
@@ -557,7 +557,7 @@ final class WidgetDataStoreTests: XCTestCase {
             registry: WidgetRegistry(providers: [provider], descriptors: [descriptor]),
             providers: [runtime],
             cache: cache,
-            defaults: makeUserDefaults("fresh-cache-meter")
+            defaults: makePreferences("fresh-cache-meter")
         )
 
         await store.refreshAll()
@@ -575,7 +575,7 @@ final class WidgetDataStoreTests: XCTestCase {
             sample: WidgetData(title: "Session", icon: provider.icon, kind: .percent, used: 0, limit: 100, displayMode: .remaining)
         )
         let now = Date(timeIntervalSince1970: 1_800_000_000)
-        let defaults = makeUserDefaults("expired-cache")
+        let defaults = makePreferences("expired-cache")
         let cache = ProviderSnapshotCache(
             userDefaults: defaults,
             storageKey: "snapshots",
@@ -602,7 +602,7 @@ final class WidgetDataStoreTests: XCTestCase {
             registry: WidgetRegistry(providers: [provider], descriptors: [descriptor]),
             providers: [runtime],
             cache: cache,
-            defaults: makeUserDefaults("expired-cache-meter")
+            defaults: makePreferences("expired-cache-meter")
         )
 
         await store.refreshAll()
@@ -614,7 +614,7 @@ final class WidgetDataStoreTests: XCTestCase {
     func testResetDisplaySettingsRestoresDefaultsAndPersists() {
         let provider = Provider(id: "test", displayName: "Test", icon: .providerMark("codex"))
         let registry = WidgetRegistry(providers: [provider], descriptors: [])
-        let defaults = makeUserDefaults("reset-display-settings")
+        let defaults = makePreferences("reset-display-settings")
         let store = WidgetDataStore(registry: registry, providers: [], defaults: defaults)
         store.meterStyle = .used
         store.resetDisplayMode = .absolute
@@ -632,10 +632,7 @@ final class WidgetDataStoreTests: XCTestCase {
         XCTAssertFalse(reloaded.alwaysShowPacing)
     }
 
-    private func makeUserDefaults(_ name: String) -> UserDefaults {
-        let suiteName = "OpenUsageTests.\(name).\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        return defaults
+    private func makePreferences(_ name: String) -> AppPreferences {
+        TestPreferences.make(name)
     }
 }

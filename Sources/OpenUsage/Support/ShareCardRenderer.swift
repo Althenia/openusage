@@ -60,7 +60,7 @@ enum ShareCardRenderer {
     /// caret is open — so the export matches what the user sees.
     ///
     /// The render is pinned to the regular density regardless of the user's popover density slider: the
-    /// rows read density via `@AppStorage`, so the saved value is swapped to `.regular` for the duration
+    /// rows read density via `@SQLiteStorage`, so the saved value is swapped to `.regular` for the duration
     /// of the render and restored on exit (synchronously), keeping the exported card consistent without
     /// disturbing the live popover.
     @discardableResult
@@ -113,7 +113,7 @@ enum ShareCardRenderer {
     }
 
     /// Shared render→copy pipeline for both share actions. Pins the render to regular density (the rows
-    /// read density via `@AppStorage`, so the saved value is swapped to `.regular` for the render and
+    /// read density via `@SQLiteStorage`, so the saved value is swapped to `.regular` for the render and
     /// restored on exit) so the export ignores the user's popover density slider; rasterizes `view`;
     /// copies the PNG; and on a successful copy surfaces the transient "Copied to clipboard" pill (a
     /// clipboard write gives no other signal). Beeps and logs (naming the card with `label`) on failure,
@@ -121,13 +121,13 @@ enum ShareCardRenderer {
     @discardableResult
     private static func renderAndCopy<Card: View>(_ view: Card, label: String, layout: LayoutStore) -> Bool {
         let densityKey = DensitySetting.key
-        let savedDensity = UserDefaults.standard.string(forKey: densityKey)
-        UserDefaults.standard.set(DensitySetting.regular.rawValue, forKey: densityKey)
+        let savedDensity = AppPreferences.standard.string(forKey: densityKey)
+        AppPreferences.standard.set(DensitySetting.regular.rawValue, forKey: densityKey)
         defer {
             if let savedDensity {
-                UserDefaults.standard.set(savedDensity, forKey: densityKey)
+                AppPreferences.standard.set(savedDensity, forKey: densityKey)
             } else {
-                UserDefaults.standard.removeObject(forKey: densityKey)
+                AppPreferences.standard.removeObject(forKey: densityKey)
             }
         }
         guard let image = image(for: view) else {

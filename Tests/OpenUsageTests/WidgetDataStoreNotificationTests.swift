@@ -38,11 +38,8 @@ final class WidgetDataStoreNotificationTests: XCTestCase {
         func refresh() async -> ProviderSnapshot { snapshot }
     }
 
-    private func makeUserDefaults(_ name: String) -> UserDefaults {
-        let suite = "WidgetDataStoreNotificationTests.\(name)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defaults.removePersistentDomain(forName: suite)
-        return defaults
+    private func makePreferences(_ name: String) -> AppPreferences {
+        TestPreferences.make(name)
     }
 
     private static let provider = Provider(id: "test", displayName: "Test", icon: .providerMark("cursor"))
@@ -75,7 +72,7 @@ final class WidgetDataStoreNotificationTests: XCTestCase {
     ) -> (WidgetDataStore, MutableRuntime, WidgetDescriptor) {
         let descriptor = Self.descriptor()
         let runtime = MutableRuntime(provider: Self.provider, descriptors: [descriptor], snapshot: snapshot(used: used))
-        let defaults = makeUserDefaults(defaultsName)
+        let defaults = makePreferences(defaultsName)
         let store = WidgetDataStore(
             registry: WidgetRegistry(providers: [Self.provider], descriptors: [descriptor]),
             providers: [runtime],
@@ -114,7 +111,7 @@ final class WidgetDataStoreNotificationTests: XCTestCase {
     }
 
     func testHealthyToCloseFiresOnceThroughTheStore() async {
-        let settings = NotificationSettingsStore(defaults: makeUserDefaults("h2c-settings"))
+        let settings = NotificationSettingsStore(defaults: makePreferences("h2c-settings"))
         allOn(settings)
         let recorder = Recorder()
         // 80% used at ~90% elapsed → projected ~89% → healthy.
@@ -134,7 +131,7 @@ final class WidgetDataStoreNotificationTests: XCTestCase {
     }
 
     func testCloseToRunningOutFiresThroughTheStore() async {
-        let settings = NotificationSettingsStore(defaults: makeUserDefaults("c2r-settings"))
+        let settings = NotificationSettingsStore(defaults: makePreferences("c2r-settings"))
         allOn(settings)
         let recorder = Recorder()
         let (store, runtime, _) = makeStore(used: 87, settings: settings, recorder: recorder, defaultsName: "c2r")
@@ -149,7 +146,7 @@ final class WidgetDataStoreNotificationTests: XCTestCase {
     }
 
     func testResetJitterDoesNotRefireRunningOutThroughTheStore() async {
-        let settings = NotificationSettingsStore(defaults: makeUserDefaults("jitter-settings"))
+        let settings = NotificationSettingsStore(defaults: makePreferences("jitter-settings"))
         allOn(settings)
         let recorder = Recorder()
         let (store, runtime, _) = makeStore(used: 80, settings: settings, recorder: recorder, defaultsName: "jitter")
@@ -164,7 +161,7 @@ final class WidgetDataStoreNotificationTests: XCTestCase {
     }
 
     func testAllTogglesOffSuppressesAllPosts() async {
-        let settings = NotificationSettingsStore(defaults: makeUserDefaults("all-off-settings"))
+        let settings = NotificationSettingsStore(defaults: makePreferences("all-off-settings"))
         settings.underTenPercent = false
         settings.healthyToClose = false
         settings.closeToRunningOut = false
@@ -176,7 +173,7 @@ final class WidgetDataStoreNotificationTests: XCTestCase {
     }
 
     func testPerTriggerOffSuppressesThatMilestoneOnly() async {
-        let settings = NotificationSettingsStore(defaults: makeUserDefaults("per-trigger-settings"))
+        let settings = NotificationSettingsStore(defaults: makePreferences("per-trigger-settings"))
         allOn(settings)
         settings.healthyToClose = false   // turn off "Cutting It Close" only
         let recorder = Recorder()
@@ -190,7 +187,7 @@ final class WidgetDataStoreNotificationTests: XCTestCase {
     }
 
     func testDisablingProviderDropsItsNotificationState() async {
-        let settings = NotificationSettingsStore(defaults: makeUserDefaults("disable-settings"))
+        let settings = NotificationSettingsStore(defaults: makePreferences("disable-settings"))
         allOn(settings)
         let recorder = Recorder()
         let enabled = EnabledFlag(true)
@@ -215,7 +212,7 @@ final class WidgetDataStoreNotificationTests: XCTestCase {
         // here), so the old `< 0.10` check would NOT fire "Almost Out" despite only 5% remaining.
         // `remainingFraction` fires it regardless of the used/remaining display choice. Prime from
         // healthy first so the under-10% edge is a real transition, not a cold start.
-        let settings = NotificationSettingsStore(defaults: makeUserDefaults("used-mode-settings"))
+        let settings = NotificationSettingsStore(defaults: makePreferences("used-mode-settings"))
         allOn(settings)
         let recorder = Recorder()
         let (store, runtime, _) = makeStore(used: 80, settings: settings, recorder: recorder, defaultsName: "used-mode")
@@ -232,7 +229,7 @@ final class WidgetDataStoreNotificationTests: XCTestCase {
         // Regression: if delivery fails (not authorized, or scheduling errored), the milestone must not
         // be marked fired — the edge stays un-consumed so it re-fires on the next evaluation instead of
         // being lost for the rest of the reset window.
-        let settings = NotificationSettingsStore(defaults: makeUserDefaults("retry-settings"))
+        let settings = NotificationSettingsStore(defaults: makePreferences("retry-settings"))
         allOn(settings)
         let recorder = Recorder()
         let (store, runtime, _) = makeStore(used: 80, settings: settings, recorder: recorder,

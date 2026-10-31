@@ -8,10 +8,8 @@ final class CodexSwapAccountTests: XCTestCase {
     private let a = CodexAccountIdentity(accountID: "workspace-a", email: "personal@example.com")!
     private let b = CodexAccountIdentity(accountID: "workspace-b", email: "work@example.com")!
 
-    private func defaults() throws -> UserDefaults {
-        let suite = "CodexSwap.\(UUID().uuidString)"
-        let value = try XCTUnwrap(UserDefaults(suiteName: suite))
-        addTeardownBlock { value.removePersistentDomain(forName: suite) }
+    private func defaults() throws -> AppPreferences {
+        let value = TestPreferences.make()
         return value
     }
 

@@ -8,18 +8,18 @@ final class FirstLaunchSetup {
     private static let pendingKey = "openusage.onboarding.welcomePending"
 
     /// The welcome screen shows on every launch until the user finishes it. An install that already
-    /// saved a provider choice skips it: an unbundled `swift run` reports a fresh install every time.
-    static func markPending(defaults: UserDefaults = .standard) {
-        guard ProviderEnablementStore(defaults: defaults).enabledIDs == nil else { return }
-        defaults.set(true, forKey: pendingKey)
+    /// saved a provider choice skips it.
+    static func markPending(defaults preferences: AppPreferences = .standard) {
+        guard ProviderEnablementStore(defaults: preferences).enabledIDs == nil else { return }
+        preferences.set(true, forKey: pendingKey)
     }
 
-    static func isPending(defaults: UserDefaults = .standard) -> Bool {
-        defaults.bool(forKey: pendingKey)
+    static func isPending(defaults preferences: AppPreferences = .standard) -> Bool {
+        preferences.bool(forKey: pendingKey)
     }
 
-    static func clearPending(defaults: UserDefaults = .standard) {
-        defaults.removeObject(forKey: pendingKey)
+    static func clearPending(defaults preferences: AppPreferences = .standard) {
+        preferences.removeObject(forKey: pendingKey)
     }
 
     enum Connection: Equatable {

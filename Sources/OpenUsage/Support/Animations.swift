@@ -53,7 +53,7 @@ extension View {
 }
 
 private struct ReduceAnimationsModifier: ViewModifier {
-    @AppStorage(ReduceAnimationsSetting.key) private var appPreference = ReduceAnimationsSetting.fallback
+    @SQLiteStorage(ReduceAnimationsSetting.key) private var appPreference = ReduceAnimationsSetting.fallback
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
 
     private var shouldReduceAnimations: Bool {

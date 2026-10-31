@@ -11,7 +11,7 @@ final class CodexMultiAccountAssemblyTests: XCTestCase {
         directories: [String: [String]] = [:],
         environment: [String: String] = [:],
         home: URL = Fixtures.home,
-        defaults: UserDefaults? = nil
+        defaults: AppPreferences? = nil
     ) async -> ProviderAccountAssembly {
         let observer = DefaultAccountObserver(
             environment: FakeEnvironment(environment),

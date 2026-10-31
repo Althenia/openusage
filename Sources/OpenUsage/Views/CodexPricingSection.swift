@@ -5,8 +5,8 @@ struct CodexPricingSection: View {
     let providerIDs: [String]
 
     @Environment(WidgetDataStore.self) private var dataStore
-    @AppStorage(DensitySetting.key) private var density = DensitySetting.regular
-    @AppStorage(CodexFallbackModelSetting.key) private var selectedModel = CodexFallbackModelSetting.none
+    @SQLiteStorage(DensitySetting.key) private var density = DensitySetting.regular
+    @SQLiteStorage(CodexFallbackModelSetting.key) private var selectedModel = CodexFallbackModelSetting.none
     @State private var options: [PricingFallbackOption] = []
     @State private var isLoading = true
     @State private var isApplying = false

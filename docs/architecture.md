@@ -13,6 +13,7 @@ The code is grouped by role:
 - `Models/` — the small value types the rest of the app speaks in (`MetricLine`, `WidgetData`, descriptors).
 - `Providers/` — one folder per provider (Claude, Codex, Cursor, Devin, Grok, OpenCode, …).
 - `Stores/` — the mutable state the UI observes.
+- `Storage/` — versioned SQLite, local preferences, and the one-time legacy import.
 - `Services/` — shared infrastructure (HTTP, the local API, process running).
 - `Support/` — small shared helpers (formatting, parsing, animations).
 - `Views/` — the SwiftUI screens (dashboard, customize, settings, menu-bar strip).
@@ -46,7 +47,7 @@ way and doesn't need to know provider-specific details. To add one, see
 [Adding a provider](adding-a-provider.md).
 
 Claude, Codex, Grok, and pi share `IncrementalJSONLScanner` for local JSONL history. Its per-file parsed events
-are cached by path, size, and modification time in a versioned Application Support store, partitioned by
+are cached by path, size, and modification time in [local SQLite storage](storage.md), partitioned by
 provider/home identity. Provider instances reading the same home share one scanner actor, which avoids
 duplicate parsing across cards; the disk store provides the reuse across process launches. Scans drop
 source-file records as their modification dates leave the requested history window, while aggregation and

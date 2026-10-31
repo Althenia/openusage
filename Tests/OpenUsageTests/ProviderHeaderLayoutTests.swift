@@ -8,10 +8,8 @@ final class ProviderHeaderLayoutTests: XCTestCase {
 
     func testDashboardHeaderFitsOversizedPlanInBothDensities() throws {
         for density in DensitySetting.allCases {
-            let suite = "ProviderHeaderLayoutTests.\(UUID().uuidString)"
-            let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+            let defaults = TestPreferences.make()
             defaults.set(density.rawValue, forKey: DensitySetting.key)
-            defer { defaults.removePersistentDomain(forName: suite) }
 
             let header = ProviderSectionHeader(
                 provider: CodexProvider.makeProvider(),
@@ -20,7 +18,7 @@ final class ProviderHeaderLayoutTests: XCTestCase {
                 staleness: StalenessHint(label: "Outdated", tooltip: "Last updated 2h ago"),
                 onCopyScreenshot: { true }
             )
-            .defaultAppStorage(defaults)
+            .environment(\.appPreferences, defaults)
             .environment(\.hoverTooltipsDisabled, true)
 
             // 320pt popover minus 14pt outer and 8pt section padding on each side.
