@@ -15,10 +15,10 @@ struct TotalSpendCard: View {
     @Namespace private var pickerNamespace
 
     /// The selected period survives popover closes and relaunches, like the meter-style toggles.
-    @AppStorage(TotalSpendSetting.periodKey) private var periodRawValue = TotalSpendPeriod.today.rawValue
+    @SQLiteStorage(TotalSpendSetting.periodKey) private var periodRawValue = TotalSpendPeriod.today.rawValue
     /// The selected metric (Cost / Cost/MTok / Tokens) survives the same way.
-    @AppStorage(TotalSpendSetting.metricKey) private var metricRawValue = TotalSpendMetric.cost.rawValue
-    @AppStorage(DensitySetting.key) private var density = DensitySetting.regular
+    @SQLiteStorage(TotalSpendSetting.metricKey) private var metricRawValue = TotalSpendMetric.cost.rawValue
+    @SQLiteStorage(DensitySetting.key) private var density = DensitySetting.regular
 
     private var period: TotalSpendPeriod {
         TotalSpendPeriod(rawValue: periodRawValue) ?? .today
@@ -214,7 +214,7 @@ struct TotalSpendCard: View {
 struct TotalSpendRingContent: View {
     let projection: TotalSpendProjection
 
-    @AppStorage(DensitySetting.key) private var density = DensitySetting.regular
+    @SQLiteStorage(DensitySetting.key) private var density = DensitySetting.regular
 
     private static let ringDiameter: CGFloat = 104
 

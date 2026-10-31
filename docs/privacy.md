@@ -53,8 +53,8 @@ Desktop's rotating refresh token and never modifies Desktop's config, cookies, o
 
 Besides the provider API calls the vendor's own tools would make, OpenUsage fetches public [model price lists](pricing.md) about once an hour (from `raw.githubusercontent.com`, `models.dev`, and this project's GitHub Pages). These are plain downloads of public data — they carry no usage, log, or account information, and they run regardless of the analytics toggle. The spend tiles are computed from local CLI logs entirely on your Mac; no log data ever leaves it.
 
-To avoid re-reading unchanged Claude, Codex, and pi logs after every relaunch, OpenUsage keeps their
-parsed usage events in `~/Library/Application Support/OpenUsage/log-scan-cache/`. These records contain
+To avoid re-reading unchanged Claude, Codex, Grok, and pi logs after every relaunch, OpenUsage keeps their
+parsed usage events in [local SQLite storage](storage.md). These records contain
 the usage metadata needed for local totals, including any per-event cost already recorded by a provider,
 but not raw JSONL lines or conversation text. They are private to your macOS account and are never sent
 to PostHog, a provider, or iCloud. Old source-file records are dropped as the scan window advances, and
@@ -72,7 +72,7 @@ analytics toggle controls extra PostHog events, not daily activity or crash repo
 - Data is fully anonymous: OpenUsage never identifies you to the analytics service and creates no user profile.
 - Daily activity and crash reports are always enabled, regardless of the extra-analytics switch.
 - Counts are rolled up locally and sent as daily summaries, so the app's normal 5-minute refresh never turns into a flood of network calls.
-- Your analytics choice and the anonymous ID are stored separately from the rest of the app's settings, so settings migrations and updates do not re-enable extra analytics or change your ID.
+- Your analytics choice and the anonymous ID use a separate namespace in the local database, so settings migrations and resets do not re-enable extra analytics or change your ID. The first SQLite import preserves the existing telemetry values and leaves their original preferences suite untouched.
 
 ## Turning extra analytics off
 

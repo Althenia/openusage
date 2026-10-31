@@ -153,7 +153,7 @@ final class ICloudUsageSyncStoreTests: XCTestCase {
     }
 
     private func makeSync(
-        defaults: UserDefaults,
+        defaults: AppPreferences,
         fileStore: RecordingHistoryFileStore,
         deviceIDStore: MemoryDeviceIDStore = MemoryDeviceIDStore(),
         writeDebounce: Duration = .seconds(3)
@@ -174,11 +174,8 @@ final class ICloudUsageSyncStoreTests: XCTestCase {
         )
     }
 
-    private func makeDefaults(_ name: String) -> UserDefaults {
-        let suite = "OpenUsageTests.ICloudSync.\(name).\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defaults.removePersistentDomain(forName: suite)
-        return defaults
+    private func makeDefaults(_ name: String) -> AppPreferences {
+        TestPreferences.make(name)
     }
 
     private func waitUntil(

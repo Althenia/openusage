@@ -5,7 +5,7 @@ import Foundation
 @MainActor
 enum ProviderCatalog {
     static func make(
-        defaults: UserDefaults = .standard,
+        defaults preferences: AppPreferences = .standard,
         claudeCards: [ClaudeAccountCard] = [],
         codex: CodexAccountDiscovery = CodexAccountDiscovery(),
         claudeIdentityKeys: [String: String] = [:]
@@ -75,7 +75,7 @@ enum ProviderCatalog {
             CursorProvider(),
             AnthropicAPIProvider(),
             AntigravityProvider(),
-            CopilotProvider(defaults: defaults),
+            CopilotProvider(defaults: preferences),
             DevinProvider(),
             GrokProvider(),
             MuseProvider(),

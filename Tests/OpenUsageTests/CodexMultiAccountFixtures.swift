@@ -63,12 +63,8 @@ enum CodexMultiAccountFixtures {
 
 @MainActor
 extension XCTestCase {
-    /// A throwaway `UserDefaults` suite, wiped again at teardown.
-    func makeScratchDefaults(_ prefix: String = "CodexMultiAccount") -> UserDefaults {
-        let suiteName = "OpenUsageTests.\(prefix).\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        addTeardownBlock { defaults.removePersistentDomain(forName: suiteName) }
-        return defaults
+    /// A throwaway SQLite-backed preferences object in a temporary directory.
+    func makeScratchDefaults(_ prefix: String = "CodexMultiAccount") -> AppPreferences {
+        TestPreferences.make(prefix)
     }
 }

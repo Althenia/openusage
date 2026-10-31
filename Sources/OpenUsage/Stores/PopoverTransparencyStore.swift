@@ -11,13 +11,13 @@ import Observation
 final class PopoverTransparencyStore {
     static let key = "increaseTransparency"
 
-    /// The persisted preference (default off). Stored here rather than as a view-local `@AppStorage` so
+    /// The persisted preference (default off). Stored here rather than as a view-local `@SQLiteStorage` so
     /// the AppKit panel honors exactly the value the Settings toggle writes. The no-op guard avoids a
-    /// redundant defaults write (and the firehose `UserDefaults.didChangeNotification` it would emit).
+    /// redundant preferences write.
     var increaseTransparency: Bool {
         didSet {
             guard increaseTransparency != oldValue else { return }
-            defaults.set(increaseTransparency, forKey: Self.key)
+            preferences.set(increaseTransparency, forKey: Self.key)
         }
     }
 
@@ -42,16 +42,16 @@ final class PopoverTransparencyStore {
     private(set) var reduceTransparency: Bool
     private(set) var increaseContrast: Bool
 
-    @ObservationIgnored private let defaults: UserDefaults
+    @ObservationIgnored private let preferences: AppPreferences
     @ObservationIgnored private var accessibilityObservation: Task<Void, Never>?
 
     init(
-        defaults: UserDefaults = .standard,
+        defaults preferences: AppPreferences = .standard,
         reduceTransparency: Bool = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency,
         increaseContrast: Bool = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
     ) {
-        self.defaults = defaults
-        self.increaseTransparency = defaults.bool(forKey: Self.key)
+        self.preferences = preferences
+        self.increaseTransparency = preferences.bool(forKey: Self.key)
         // The flags default to the live `NSWorkspace` values (production) but are injectable so tests can
         // pin them and exercise the accessibility clamp deterministically, independent of the test host.
         self.reduceTransparency = reduceTransparency

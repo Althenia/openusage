@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Changed
++ Store local settings, usage history, and caches in SQLite, importing existing data transactionally while retaining the originals; older builds continue using their separate retained copies
+
 ### New Features
 - Add Anthropic API: organization Messages API tokens and actual reported USD cost for the current UTC month, read with an Admin API key
 - Add OpenAI API: organization completions tokens (input plus output, all modalities) and actual reported USD cost for the current UTC month, read with an organization Admin key

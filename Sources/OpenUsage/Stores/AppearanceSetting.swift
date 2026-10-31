@@ -5,7 +5,7 @@ import AppKit
 /// has to happen at the AppKit level. `applyCurrent()` also posts `didChangeNotification` for
 /// `StatusItemController` to pin the same appearance directly on the menu-bar panel. The menu-bar
 /// label is unaffected (template image).
-enum AppearanceSetting: String, Hashable, Sendable, CaseIterable, UserDefaultsBacked {
+enum AppearanceSetting: String, Hashable, Sendable, CaseIterable, SQLitePreferencesBacked {
     case system
     case light
     case dark
@@ -35,7 +35,7 @@ enum AppearanceSetting: String, Hashable, Sendable, CaseIterable, UserDefaultsBa
         }
     }
 
-    // `current` (the stored choice, `.system` when unset) comes from `UserDefaultsBacked`.
+    // `current` (the stored choice, `.system` when unset) comes from `SQLitePreferencesBacked`.
 
     /// Reads the stored choice and applies it app-wide. Call once at launch and again whenever
     /// the setting changes — app windows restyle immediately, and the notification lets the

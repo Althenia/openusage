@@ -40,20 +40,22 @@ struct CursorUsageHistoryStore: Sendable {
         var days: [String: CursorUsageDay]
     }
 
+    static let namespace = "cursor-usage-history"
     private static let schemaVersion = 2
 
-    var directory: URL
+    private var store: SQLiteStore?
 
-    init(directory: URL = CursorUsageHistoryStore.defaultDirectory) {
-        self.directory = directory
+    init(store: SQLiteStore? = nil) {
+        self.store = store
     }
 
     func load(userID: String, timeZone: String) -> [String: CursorUsageDay] {
-        let url = fileURL(userID: userID)
-        guard FileManager.default.fileExists(atPath: url.path) else { return [:] }
-
         do {
-            let file = try JSONDecoder().decode(File.self, from: Data(contentsOf: url))
+            let store = try CacheStore.resolve(store)
+            guard let data = try store.data(namespace: Self.namespace, key: key(userID: userID)) else {
+                return [:]
+            }
+            let file = try JSONDecoder().decode(File.self, from: data)
             guard file.schemaVersion == Self.schemaVersion,
                   file.userID == userID,
                   file.timeZone == timeZone
@@ -75,20 +77,18 @@ struct CursorUsageHistoryStore: Sendable {
             days: days
         )
         do {
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            let data = try JSONEncoder().encode(file)
-            try data.write(to: fileURL(userID: userID), options: .atomic)
+            let store = try CacheStore.resolve(store)
+            try store.set(
+                try JSONEncoder().encode(file),
+                namespace: Self.namespace,
+                key: key(userID: userID)
+            )
         } catch {
             AppLog.warn(LogTag.plugin("cursor"), "usage history cache could not be saved")
         }
     }
 
-    private func fileURL(userID: String) -> URL {
-        directory.appendingPathComponent("\(JSONLScanCachePaths.stableFingerprint(userID)).json")
-    }
-
-    private static var defaultDirectory: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("OpenUsage/cursor-usage-history", isDirectory: true)
+    private func key(userID: String) -> String {
+        JSONLScanCachePaths.stableFingerprint(userID)
     }
 }

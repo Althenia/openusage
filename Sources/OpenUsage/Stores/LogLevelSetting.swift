@@ -1,6 +1,6 @@
 import Foundation
 
-/// The persisted log level that gates the file log. A `String`-raw `UserDefaultsBacked` enum so it
+/// The persisted log level that gates the file log. A `String`-raw `SQLitePreferencesBacked` enum so it
 /// reads its stored choice through the same idiom as every other persisted setting.
 ///
 /// The key (`logLevel`) and the lowercase raw values (`error`/`warn`/`info`/`debug`) mirror the
@@ -9,7 +9,7 @@ import Foundation
 /// default stays quiet at Info, and Debug is something the user opts into. `Trace` is intentionally
 /// dropped — the issue's floor is Error/Warn/Info/Debug and `os.Logger` has no Trace tier — and
 /// `off` is not exposed (the tray never produced it).
-enum LogLevelSetting: String, Hashable, Sendable, CaseIterable, UserDefaultsBacked {
+enum LogLevelSetting: String, Hashable, Sendable, CaseIterable, SQLitePreferencesBacked {
     case error
     case warn
     case info

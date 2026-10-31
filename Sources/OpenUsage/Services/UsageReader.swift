@@ -23,20 +23,22 @@ public enum UsageReaderError: LocalizedError, Sendable {
 /// It owns no timer, local server, status item, updater, or other long-lived app service.
 @MainActor
 public struct UsageReader {
-    private let defaults: UserDefaults
+    private let defaults: AppPreferences
     private let providersOverride: [ProviderRuntime]?
 
-    public init(userDefaults: UserDefaults) {
-        self.defaults = userDefaults
+    public init(bundleIdentifier: String) throws {
+        _ = try StorageBootstrap.prepare(bundleIdentifier: bundleIdentifier)
+        self.defaults = .standard
         self.providersOverride = nil
     }
 
-    init(userDefaults: UserDefaults, providers: [ProviderRuntime]) {
+    init(userDefaults: AppPreferences, providers: [ProviderRuntime]) {
         self.defaults = userDefaults
         self.providersOverride = providers
     }
 
     public func read(providerID requestedProviderID: String? = nil, force: Bool = false) async throws -> UsageReadResult {
+        try defaults.checkError()
         // The launch account pass (see `ProviderAccountAssembly`): resolves each family's default
         // account so cached snapshots are guarded — and refreshed ones stamped — with the correct
         // account. Skipped when a test injects its own providers — they have no real homes to read.
@@ -144,6 +146,7 @@ public struct UsageReader {
             // produce a body for a known token. Fail loudly rather than print nothing.
             throw UsageReaderError.refreshFailed(warnings.first ?? "local read produced no data")
         }
+        try defaults.checkError()
         return UsageReadResult(data: data, warnings: warnings)
     }
 

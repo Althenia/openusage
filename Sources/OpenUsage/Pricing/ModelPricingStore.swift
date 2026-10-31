@@ -25,7 +25,7 @@ actor ModelPricingStore {
     }
 
     private let http: any HTTPClient
-    private let cacheDirectory: URL
+    private let store: SQLiteStore?
     private let now: @Sendable () -> Date
     private let sourceURLs: [SourceID: URL]
     private let bundledData: @Sendable (String) -> Data?
@@ -37,13 +37,13 @@ actor ModelPricingStore {
 
     init(
         http: any HTTPClient = URLSessionHTTPClient(),
-        cacheDirectory: URL? = nil,
+        store: SQLiteStore? = nil,
         now: @escaping @Sendable () -> Date = Date.init,
         sourceURLs: [SourceID: URL] = ModelPricingStore.defaultSourceURLs,
         bundledData: @escaping @Sendable (String) -> Data? = ModelPricingStore.bundledResourceData
     ) {
         self.http = http
-        self.cacheDirectory = cacheDirectory ?? Self.defaultCacheDirectory
+        self.store = store
         self.now = now
         self.sourceURLs = sourceURLs
         self.bundledData = bundledData
@@ -54,11 +54,6 @@ actor ModelPricingStore {
         .modelsDev: URL(string: "https://models.dev/api.json")!,
         .supplement: URL(string: "https://robinebers.github.io/openusage/pricing_supplement.json")!
     ]
-
-    private static var defaultCacheDirectory: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("OpenUsage/pricing", isDirectory: true)
-    }
 
     private static func bundledResourceData(_ resourceName: String) -> Data? {
         guard let url = Bundle.openUsageResources.url(forResource: resourceName, withExtension: "json") else {
@@ -258,25 +253,32 @@ actor ModelPricingStore {
 
     // MARK: - Disk cache
 
-    private func cacheFile(_ source: SourceID) -> URL {
-        cacheDirectory.appendingPathComponent("\(source.rawValue).json")
-    }
+    private static let namespace = "pricing"
+    private static let stateKey = "state.json"
 
-    private var stateFile: URL {
-        cacheDirectory.appendingPathComponent("state.json")
+    private func cacheKey(_ source: SourceID) -> String {
+        "\(source.rawValue).json"
     }
 
     private func readCache(_ source: SourceID) -> Data? {
-        try? Data(contentsOf: cacheFile(source))
+        readRow(cacheKey(source))
     }
 
     private func writeCache(_ source: SourceID, data: Data) throws {
-        try FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
-        try data.write(to: cacheFile(source), options: .atomic)
+        try CacheStore.resolve(store).set(data, namespace: Self.namespace, key: cacheKey(source))
+    }
+
+    private func readRow(_ key: String) -> Data? {
+        do {
+            return try CacheStore.resolve(store).data(namespace: Self.namespace, key: key)
+        } catch {
+            AppLog.error("pricing", "could not read pricing cache \(key): \(error.localizedDescription)")
+            return nil
+        }
     }
 
     private func readSourceStates() -> [SourceID: SourceState] {
-        guard let data = try? Data(contentsOf: stateFile),
+        guard let data = readRow(Self.stateKey),
               let states = try? JSONDecoder().decode([SourceID: SourceState].self, from: data) else {
             return [:]
         }
@@ -285,9 +287,8 @@ actor ModelPricingStore {
 
     private func writeSourceStates() {
         do {
-            try FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
             let data = try JSONEncoder().encode(sourceStates)
-            try data.write(to: stateFile, options: .atomic)
+            try CacheStore.resolve(store).set(data, namespace: Self.namespace, key: Self.stateKey)
         } catch {
             AppLog.warn("pricing", "could not persist pricing fetch state: \(error.localizedDescription)")
         }

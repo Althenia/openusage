@@ -26,11 +26,8 @@ final class UsageHistoryRefreshTriggerTests: XCTestCase {
         XCTAssertEqual(writes, 2, "a direct manual provider refresh publishes immediately")
     }
 
-    private func makeDefaults() -> UserDefaults {
-        let suite = "OpenUsageTests.HistoryTriggers.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defaults.removePersistentDomain(forName: suite)
-        return defaults
+    private func makeDefaults() -> AppPreferences {
+        TestPreferences.make()
     }
 }
 

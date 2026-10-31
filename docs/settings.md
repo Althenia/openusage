@@ -1,5 +1,9 @@
 # Settings
 
+App-owned settings and caches use [local SQLite storage](storage.md). The first launch after upgrading
+imports existing values transactionally and leaves the originals untouched. The global shortcut,
+Sparkle's own preferences, and system login-item state keep their native storage.
+
 Settings lives inside the popover — there is no separate window. Open it from the footer's **Options** menu, with ⌘, while the popover is showing, or by right-clicking the menu bar icon and choosing Settings. The dashboard slides over to the Settings screen, which carries a back button in its top-left corner. Go back with that button, the ⌘, shortcut, or Esc (Esc always backs out to the dashboard first — pressing it again closes the popover).
 
 ## General

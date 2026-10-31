@@ -9,12 +9,8 @@ import XCTest
 /// cache (behavior identical to before the guard), and non-account providers are untouched.
 @MainActor
 final class WidgetDataStoreAccountCacheTests: XCTestCase {
-    private func makeUserDefaults(_ name: String) -> UserDefaults {
-        let suiteName = "WidgetDataStoreAccountCacheTests.\(name).\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        addTeardownBlock { defaults.removePersistentDomain(forName: suiteName) }
-        return defaults
+    private func makePreferences(_ name: String) -> AppPreferences {
+        TestPreferences.make(name)
     }
 
     private func provider(_ id: String) -> Provider {
@@ -33,7 +29,7 @@ final class WidgetDataStoreAccountCacheTests: XCTestCase {
     private func makeStore(
         providers: [Provider],
         cache: ProviderSnapshotCache,
-        defaults: UserDefaults,
+        defaults: AppPreferences,
         identityKeys: [String: String]
     ) -> WidgetDataStore {
         WidgetDataStore(
@@ -48,7 +44,7 @@ final class WidgetDataStoreAccountCacheTests: XCTestCase {
     /// A mismatched stamp drops ONLY that entry: the swapped card starts blank until its refresh,
     /// while the other family's card with a matching stamp keeps painting.
     func testMismatchedStampDropsOnlyThatEntry() {
-        let defaults = makeUserDefaults("mismatch")
+        let defaults = makePreferences("mismatch")
         let cache = ProviderSnapshotCache(userDefaults: defaults, storageKey: "snapshots", ttl: 600, now: { Date() })
         cache.store(snapshot("claude", used: 40), producedByIdentityKey: "acct-OLD")
         cache.store(snapshot("codex", used: 50), producedByIdentityKey: "acct-B")
@@ -66,7 +62,7 @@ final class WidgetDataStoreAccountCacheTests: XCTestCase {
     /// An unstamped entry on an account-aware card whose current identity IS known was written while
     /// the identity was unresolved — unattributable, so conservatively dropped.
     func testNilStampWithKnownIdentityIsDropped() {
-        let defaults = makeUserDefaults("nil-stamp")
+        let defaults = makePreferences("nil-stamp")
         let cache = ProviderSnapshotCache(userDefaults: defaults, storageKey: "snapshots", ttl: 600, now: { Date() })
         cache.store(snapshot("codex", used: 40))
 
@@ -83,7 +79,7 @@ final class WidgetDataStoreAccountCacheTests: XCTestCase {
     /// stamp either way — it keeps its cache, exactly as before the guard existed. Dropping here
     /// would blank the card at every launch for users whose identity never resolves.
     func testUnresolvedCurrentIdentityKeepsEntry() {
-        let defaults = makeUserDefaults("no-identity")
+        let defaults = makePreferences("no-identity")
         let cache = ProviderSnapshotCache(userDefaults: defaults, storageKey: "snapshots", ttl: 600, now: { Date() })
         cache.store(snapshot("claude", used: 40), producedByIdentityKey: "acct-A")
         cache.store(snapshot("codex", used: 50))
@@ -101,7 +97,7 @@ final class WidgetDataStoreAccountCacheTests: XCTestCase {
     /// Non-account providers are untouched by the guard: their entries load with or without a stamp
     /// (they never carry one in production, but even a stray stamp must not gate them).
     func testNonAccountProviderLoadsRegardlessOfStamp() {
-        let defaults = makeUserDefaults("non-account")
+        let defaults = makePreferences("non-account")
         let cache = ProviderSnapshotCache(userDefaults: defaults, storageKey: "snapshots", ttl: 600, now: { Date() })
         cache.store(snapshot("cursor", used: 40))
         cache.store(snapshot("grok", used: 50), producedByIdentityKey: "stray-stamp")
@@ -120,7 +116,7 @@ final class WidgetDataStoreAccountCacheTests: XCTestCase {
     /// under persisted freshness (the one-shot CLI) that would copy the previous account's snapshot
     /// back in. A matching stamp keeps the normal cache-hit path.
     func testRefreshNeverCacheHitsAMismatchedStampEntry() async {
-        let defaults = makeUserDefaults("refresh-gate")
+        let defaults = makePreferences("refresh-gate")
         let cache = ProviderSnapshotCache(userDefaults: defaults, storageKey: "snapshots", ttl: 600, now: { Date() })
         cache.store(snapshot("claude", used: 40), producedByIdentityKey: "acct-OLD")
 
@@ -148,7 +144,7 @@ final class WidgetDataStoreAccountCacheTests: XCTestCase {
     /// A refresh writes the card's launch-resolved identity as the stamp, and a nil identity CLEARS
     /// any prior stamp — leaving the old account's stamp would falsely bless the new snapshot.
     func testStoreStampsAndClearsProducerIdentity() {
-        let defaults = makeUserDefaults("stamp-write")
+        let defaults = makePreferences("stamp-write")
         let cache = ProviderSnapshotCache(userDefaults: defaults, storageKey: "snapshots", ttl: 600, now: { Date() })
 
         cache.store(snapshot("claude", used: 40), producedByIdentityKey: "acct-A")

@@ -13,8 +13,8 @@ struct DashboardContentView: View {
     @Binding var reorderLift: ReorderLift?
     @Binding var scrollPosition: ScrollPosition
 
-    @AppStorage(DensitySetting.key) private var density = DensitySetting.regular
-    @AppStorage(TotalSpendSetting.key) private var showTotalSpend = true
+    @SQLiteStorage(DensitySetting.key) private var density = DensitySetting.regular
+    @SQLiteStorage(TotalSpendSetting.key) private var showTotalSpend = true
 
     var body: some View {
         PopoverScrollView {

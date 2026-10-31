@@ -18,6 +18,11 @@ The script builds a signed app bundle under `dist/` and launches it in place —
 own settings and keychain and never disturbs a released OpenUsage. It ships no update feed, so it never
 checks for updates — test updates with a real signed, notarized release build.
 
+App-owned settings and caches use [local SQLite storage](storage.md). The development bundle gets a
+different database filename from the release bundle. Both honor an absolute `XDG_DATA_HOME` from their
+process environment, not shell-only exports captured after startup. Match that environment when comparing
+the app with the CLI. Tests must inject synthetic stores rather than launch a migration against real data.
+
 ## Stream logs
 
 To watch the app's logs live while you reproduce an issue:

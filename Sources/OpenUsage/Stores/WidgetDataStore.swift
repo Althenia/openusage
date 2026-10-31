@@ -15,7 +15,7 @@ final class WidgetDataStore {
     private let registry: WidgetRegistry
     private let providersByID: [String: ProviderRuntime]
     private let cache: ProviderSnapshotCache
-    private let defaults: UserDefaults
+    private let preferences: AppPreferences
     /// Whether a provider is currently enabled. Injected so the store consults the single
     /// `ProviderEnablementStore` without owning it; defaults to "all enabled" for tests and previews.
     private let isProviderEnabled: @MainActor (String) -> Bool
@@ -105,20 +105,20 @@ final class WidgetDataStore {
     /// Global meter style: whether every bounded tile (and the menu-bar value) renders as "used" or
     /// "left/remaining". Persisted so the choice survives relaunch; defaults to `.remaining`.
     var meterStyle: WidgetDisplayMode {
-        didSet { defaults.set(meterStyle.rawValue, forKey: Self.meterStyleKey) }
+        didSet { preferences.set(meterStyle.rawValue, forKey: Self.meterStyleKey) }
     }
 
     /// Global reset-countdown format: relative ("Resets in 4d 17h") or absolute ("Resets tomorrow at
     /// 9:00 AM"). Persisted across relaunch; defaults to `.relative`. Toggled by clicking a reset label.
     var resetDisplayMode: ResetDisplayMode {
-        didSet { defaults.set(resetDisplayMode.rawValue, forKey: Self.resetDisplayModeKey) }
+        didSet { preferences.set(resetDisplayMode.rawValue, forKey: Self.resetDisplayModeKey) }
     }
 
     /// Global "always show pacing" opt-in: when on, on-track rows surface their pace projection (the
     /// blue/healthy row gains its "~N% left at reset" copy + an even-pace tick, the amber tick switches
     /// to the same even-pace line). Persisted across relaunch; defaults to `false` (every row unchanged).
     var alwaysShowPacing: Bool {
-        didSet { defaults.set(alwaysShowPacing, forKey: Self.alwaysShowPacingKey) }
+        didSet { preferences.set(alwaysShowPacing, forKey: Self.alwaysShowPacingKey) }
     }
 
     /// Restores the Usage Display preferences (meter style, reset-time format, always-show-pacing) to
@@ -134,7 +134,7 @@ final class WidgetDataStore {
         registry: WidgetRegistry,
         providers: [ProviderRuntime],
         cache: ProviderSnapshotCache = ProviderSnapshotCache(),
-        defaults: UserDefaults = .standard,
+        defaults preferences: AppPreferences = .standard,
         isProviderEnabled: @escaping @MainActor (String) -> Bool = { _ in true },
         orderedDescriptors: (@MainActor () -> [WidgetDescriptor])? = nil,
         now: @escaping () -> Date = Date.init,
@@ -150,7 +150,7 @@ final class WidgetDataStore {
         self.registry = registry
         self.providersByID = Dictionary(uniqueKeysWithValues: providers.map { ($0.provider.id, $0) })
         self.cache = cache
-        self.defaults = defaults
+        self.preferences = preferences
         self.isProviderEnabled = isProviderEnabled
         self.orderedDescriptors = orderedDescriptors ?? { registry.descriptors }
         self.now = now
@@ -163,9 +163,9 @@ final class WidgetDataStore {
                 await AppNotifications.shared.post(idPrefix: idPrefix, title: title, subtitle: subtitle, body: body)
             }
         self.providerIdentityKeys = providerIdentityKeys
-        self.meterStyle = defaults.enumValue(forKey: Self.meterStyleKey, default: .remaining)
-        self.resetDisplayMode = defaults.enumValue(forKey: Self.resetDisplayModeKey, default: .relative)
-        self.alwaysShowPacing = defaults.bool(forKey: Self.alwaysShowPacingKey)
+        self.meterStyle = preferences.enumValue(forKey: Self.meterStyleKey, default: .remaining)
+        self.resetDisplayMode = preferences.enumValue(forKey: Self.resetDisplayModeKey, default: .relative)
+        self.alwaysShowPacing = preferences.bool(forKey: Self.alwaysShowPacingKey)
         // Stale-while-revalidate: load whatever was cached (expired included) so the menu bar and
         // dashboard show last-known values immediately at launch instead of "—"; the refresh loop
         // replaces them as soon as fresh data lands.

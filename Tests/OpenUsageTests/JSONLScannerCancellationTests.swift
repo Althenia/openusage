@@ -105,7 +105,7 @@ final class JSONLScannerCancellationTests: XCTestCase {
         let persistence = JSONLScanCachePersistence(
             namespace: "test",
             schemaVersion: 1,
-            directory: base.appendingPathComponent("cache"),
+            store: TestPreferences.makeStore("scannerCancellation"),
             writeDebounce: .milliseconds(1)
         )
         let scanner = IncrementalJSONLScanner<Int>(maxConcurrentParses: 1, persistence: persistence)

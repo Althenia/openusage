@@ -20,7 +20,7 @@ struct WidgetGroupedListView: View {
     @State private var frameStore = ReorderFrameStore()
     @State private var activeProviderID: String?
     @State private var activeMetricID: String?
-    @AppStorage(DensitySetting.key) private var density = DensitySetting.regular
+    @SQLiteStorage(DensitySetting.key) private var density = DensitySetting.regular
 
     @Environment(\.codexResetClaims) private var codexResetClaims
 

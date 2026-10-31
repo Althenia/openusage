@@ -4,11 +4,8 @@ import XCTest
 @MainActor
 final class PopoverTransparencyStoreTests: XCTestCase {
     /// Isolated, throwaway defaults per test (pattern from `RefreshSettingTests`).
-    private func makeDefaults(_ name: String) -> UserDefaults {
-        let suiteName = "OpenUsageTests.Transparency.\(name).\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        return defaults
+    private func makeDefaults(_ name: String) -> AppPreferences {
+        TestPreferences.make(name)
     }
 
     /// A store on throwaway defaults with the accessibility flags pinned (both off by default), so the

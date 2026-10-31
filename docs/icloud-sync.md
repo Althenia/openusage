@@ -1,5 +1,9 @@
 # iCloud Sync
 
+Local settings and caches use [SQLite](storage.md), but iCloud still exchanges the same versioned
+history JSON files. The database and its sidecars are not uploaded. The device identity remains
+Keychain-first, and downloaded peer history stays in memory rather than entering the local cache.
+
 **Sync Across Macs** is off by default. When it is on, each Mac writes one versioned OpenUsage history
 file to the app's private iCloud container and reads the files written by other Macs signed into the same
 iCloud account. A random device ID is kept in the login Keychain so the same Mac continues updating its

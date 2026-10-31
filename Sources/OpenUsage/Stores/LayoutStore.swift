@@ -112,7 +112,7 @@ final class LayoutStore {
 
     init(
         registry: WidgetRegistry,
-        defaults: UserDefaults = .standard,
+        defaults preferences: AppPreferences = .standard,
         storageKey: String = "openusage.layout.v1",
         defaultMetricIDs: [String] = DefaultLayout.metricIDs,
         migrationBaselineMetricIDs: [String] = DefaultLayout.migrationBaselineMetricIDs,
@@ -121,7 +121,7 @@ final class LayoutStore {
         isProviderEnabled: @escaping @MainActor (String) -> Bool = { _ in true }
     ) {
         self.registry = registry
-        let persistence = LayoutPersistence(defaults: defaults, storageKey: storageKey)
+        let persistence = LayoutPersistence(defaults: preferences, storageKey: storageKey)
         self.persistence = persistence
         self.defaultMetricIDs = defaultMetricIDs
         self.defaultPinnedMetricIDs = defaultPinnedMetricIDs

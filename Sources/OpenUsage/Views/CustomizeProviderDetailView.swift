@@ -23,7 +23,7 @@ struct CustomizeProviderDetailView: View {
     let frameStore: ReorderFrameStore
 
     @State private var activeMetricID: String?
-    @AppStorage(DensitySetting.key) private var density = DensitySetting.regular
+    @SQLiteStorage(DensitySetting.key) private var density = DensitySetting.regular
 
     var body: some View {
         if let group = layout.customizeDetail(for: providerID) {

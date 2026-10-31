@@ -32,7 +32,7 @@ struct ProviderAccountAssembly {
     /// `waitsForLoginShell`: true for the menu-bar app (a Finder/Dock launch inherits no shell
     /// exports, so the pass leans on the login-shell layers), false for the one-shot CLI (a terminal
     /// launch's process environment already carries the user's exports).
-    static func make(defaults: UserDefaults = .standard, waitsForLoginShell: Bool) async -> ProviderAccountAssembly {
+    static func make(defaults preferences: AppPreferences = .standard, waitsForLoginShell: Bool) async -> ProviderAccountAssembly {
         // The identity read needs the login shell's exports (CLAUDE_CONFIG_DIR/CODEX_HOME name the
         // default homes), and it reads them through the very same reader the provider auth stores
         // use — `ProcessEnvironmentReader`, which pins identity-relevant keys to the persisted
@@ -57,9 +57,9 @@ struct ProviderAccountAssembly {
         }
         return await make(
             observer: DefaultAccountObserver(),
-            accountsStore: ProviderAccountsStore(defaults: defaults),
+            accountsStore: ProviderAccountsStore(defaults: preferences),
             families: families,
-            profiles: ProviderProfilesStore.load(from: defaults)
+            profiles: ProviderProfilesStore.load(from: preferences)
         )
     }
 

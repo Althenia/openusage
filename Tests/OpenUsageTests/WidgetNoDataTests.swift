@@ -41,7 +41,7 @@ final class WidgetNoDataTests: XCTestCase {
                 lines: [.progress(label: "Present", used: 40, limit: 100, format: .percent)]
             )
         )
-        let defaults = makeUserDefaults("missing-line")
+        let defaults = makePreferences("missing-line")
         let store = WidgetDataStore(
             registry: WidgetRegistry(providers: [provider], descriptors: [present, missing]),
             providers: [runtime],
@@ -72,10 +72,7 @@ final class WidgetNoDataTests: XCTestCase {
         )
     }
 
-    private func makeUserDefaults(_ name: String) -> UserDefaults {
-        let suiteName = "OpenUsageTests.NoData.\(name).\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        return defaults
+    private func makePreferences(_ name: String) -> AppPreferences {
+        TestPreferences.make(name)
     }
 }

@@ -24,7 +24,7 @@ struct WidgetRowView: View {
     /// one-liners into a single cluster (Compact a step harder).
     var condensedTop: Bool = false
 
-    @AppStorage(DensitySetting.key) private var density = DensitySetting.regular
+    @SQLiteStorage(DensitySetting.key) private var density = DensitySetting.regular
     @Environment(\.reduceAnimations) private var reduceAnimations
     @State private var modelHover = HoverPopoverState()
     /// Backs the resets popover's claim flow; `nil` outside the live dashboard (previews, share

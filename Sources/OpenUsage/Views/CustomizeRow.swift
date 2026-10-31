@@ -15,7 +15,7 @@ struct CustomizeMetricRow<Handle: View, Trailing: View>: View {
     let handle: (AnyView) -> Handle
     @ViewBuilder var trailing: Trailing
 
-    @AppStorage(DensitySetting.key) private var density = DensitySetting.regular
+    @SQLiteStorage(DensitySetting.key) private var density = DensitySetting.regular
 
     var body: some View {
         HStack(spacing: 10) {

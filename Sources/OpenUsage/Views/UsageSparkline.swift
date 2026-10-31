@@ -10,7 +10,7 @@ struct UsageSparkline: View {
     /// bars, the popover, and the accessibility label all read one list.
     private let points: [MetricChartPoint]
 
-    @AppStorage(DensitySetting.key) private var density = DensitySetting.regular
+    @SQLiteStorage(DensitySetting.key) private var density = DensitySetting.regular
     @Environment(\.reduceAnimations) private var reduceAnimations
     @State private var hover = HoverPopoverState()
 

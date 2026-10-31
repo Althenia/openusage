@@ -154,7 +154,7 @@ final class ICloudUsageSyncStore {
     private static let enabledKey = "openusage.icloudSync.enabled.v1"
     private static let deviceIDKey = "openusage.icloudSync.deviceID.v1"
 
-    private let defaults: UserDefaults
+    private let preferences: AppPreferences
     private let fileStore: any UsageHistoryFileStoring
     private let identityError: String?
     private let dataStore: WidgetDataStore
@@ -170,7 +170,7 @@ final class ICloudUsageSyncStore {
     var enabled: Bool {
         didSet {
             guard enabled != oldValue else { return }
-            defaults.set(enabled, forKey: Self.enabledKey)
+            preferences.set(enabled, forKey: Self.enabledKey)
             Task { await applyEnabledChange() }
         }
     }
@@ -182,22 +182,22 @@ final class ICloudUsageSyncStore {
 
     init(
         dataStore: WidgetDataStore,
-        defaults: UserDefaults = .standard,
+        defaults preferences: AppPreferences = .standard,
         fileStore: any UsageHistoryFileStoring = ICloudUsageHistoryFileStore(),
         deviceIDStore: any ICloudDeviceIDStoring = KeychainICloudDeviceIDStore(),
         writeDebounce: Duration = .seconds(3),
         observesMetadataChanges: Bool = true
     ) {
         self.dataStore = dataStore
-        self.defaults = defaults
+        self.preferences = preferences
         self.fileStore = fileStore
         self.writeDebounce = writeDebounce
         self.observesMetadataChanges = observesMetadataChanges
-        let identity = Self.resolveDeviceID(defaults: defaults, store: deviceIDStore)
+        let identity = Self.resolveDeviceID(defaults: preferences, store: deviceIDStore)
         self.deviceID = identity.id
         self.identityError = identity.error
         self.deviceName = Host.current().localizedName ?? ProcessInfo.processInfo.hostName
-        self.enabled = defaults.bool(forKey: Self.enabledKey)
+        self.enabled = preferences.bool(forKey: Self.enabledKey)
         dataStore.onLocalHistoryChanged = { [weak self] in self?.scheduleWrite() }
         if enabled {
             Task { await applyEnabledChange() }
@@ -299,23 +299,23 @@ final class ICloudUsageSyncStore {
     }
 
     private static func resolveDeviceID(
-        defaults: UserDefaults,
+        defaults preferences: AppPreferences,
         store: any ICloudDeviceIDStoring
     ) -> (id: String, error: String?) {
-        let saved = normalizedDeviceID(defaults.string(forKey: deviceIDKey))
+        let saved = normalizedDeviceID(preferences.string(forKey: deviceIDKey))
         do {
             if let stored = normalizedDeviceID(try store.readDeviceID()) {
-                defaults.set(stored, forKey: deviceIDKey)
+                preferences.set(stored, forKey: deviceIDKey)
                 return (stored, nil)
             }
 
             let id = saved ?? UUID().uuidString.lowercased()
             try store.writeDeviceID(id)
-            defaults.set(id, forKey: deviceIDKey)
+            preferences.set(id, forKey: deviceIDKey)
             return (id, nil)
         } catch {
             let id = saved ?? UUID().uuidString.lowercased()
-            defaults.set(id, forKey: deviceIDKey)
+            preferences.set(id, forKey: deviceIDKey)
             let message = "OpenUsage couldn’t save this Mac’s sync identity in Keychain. "
                 + "Sync may create a duplicate device if app preferences are reset."
             AppLog.warn(.keychain, "iCloud device identity failed: \(error.localizedDescription)")

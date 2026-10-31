@@ -39,7 +39,7 @@ enum ProviderProfileError: LocalizedError, Equatable {
 final class ProviderProfilesStore {
     static let storageKey = "openusage.providerProfiles.v1"
 
-    @ObservationIgnored private let defaults: UserDefaults
+    @ObservationIgnored private let preferences: AppPreferences
     @ObservationIgnored private let directoryExists: (String) -> Bool
     @ObservationIgnored private let launchProfiles: [ProviderProfile]
     private(set) var profiles: [ProviderProfile]
@@ -47,21 +47,21 @@ final class ProviderProfilesStore {
     var needsRelaunch: Bool { profiles != launchProfiles }
 
     init(
-        defaults: UserDefaults = .standard,
+        defaults preferences: AppPreferences = .standard,
         directoryExists: @escaping (String) -> Bool = { path in
             var isDirectory: ObjCBool = false
             return FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory) && isDirectory.boolValue
         }
     ) {
-        self.defaults = defaults
+        self.preferences = preferences
         self.directoryExists = directoryExists
-        let loaded = Self.load(from: defaults)
+        let loaded = Self.load(from: preferences)
         self.profiles = loaded
         self.launchProfiles = loaded
     }
 
-    static func load(from defaults: UserDefaults) -> [ProviderProfile] {
-        guard let data = defaults.data(forKey: storageKey) else { return [] }
+    static func load(from preferences: AppPreferences) -> [ProviderProfile] {
+        guard let data = preferences.data(forKey: storageKey) else { return [] }
         do {
             return try JSONDecoder().decode([ProviderProfile].self, from: data)
         } catch {
@@ -116,7 +116,7 @@ final class ProviderProfilesStore {
 
     private func persist() {
         do {
-            defaults.set(try JSONEncoder().encode(profiles), forKey: Self.storageKey)
+            preferences.set(try JSONEncoder().encode(profiles), forKey: Self.storageKey)
         } catch {
             AppLog.error(.config, "failed to save provider profiles: \(error.localizedDescription)")
         }

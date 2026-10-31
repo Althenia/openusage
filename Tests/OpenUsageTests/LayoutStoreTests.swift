@@ -438,7 +438,7 @@ final class LayoutStoreTests: XCTestCase {
         // Legacy layout: predates the expanded feature (no saved expanded set).
         saveStored([PlacedWidget(descriptorID: "cursor.usage")], forKey: "layout", in: defaults)
 
-        let args: (UserDefaults) -> LayoutStore = { d in
+        let args: (AppPreferences) -> LayoutStore = { d in
             LayoutStore(
                 registry: .mock,
                 defaults: d,
@@ -466,7 +466,7 @@ final class LayoutStoreTests: XCTestCase {
         let defaults = makeDefaults("ExpandOnEnablePersists")
         saveStored([PlacedWidget(descriptorID: "cursor.usage")], forKey: "layout", in: defaults)
 
-        let args: (UserDefaults) -> LayoutStore = { d in
+        let args: (AppPreferences) -> LayoutStore = { d in
             LayoutStore(
                 registry: .mock,
                 defaults: d,
@@ -1251,14 +1251,11 @@ final class LayoutStoreTests: XCTestCase {
         LayoutStore(registry: .mock, defaults: makeDefaults(name), storageKey: "layout")
     }
 
-    private func makeDefaults(_ name: String) -> UserDefaults {
-        let suiteName = "OpenUsageTests.LayoutStore.\(name).\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        return defaults
+    private func makeDefaults(_ name: String) -> AppPreferences {
+        TestPreferences.make(name)
     }
 
-    private func saveStored<T: Encodable>(_ value: T, forKey key: String, in defaults: UserDefaults) {
+    private func saveStored<T: Encodable>(_ value: T, forKey key: String, in defaults: AppPreferences) {
         defaults.set(try! JSONEncoder().encode(value), forKey: key)
     }
 }

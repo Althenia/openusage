@@ -2,7 +2,7 @@ import Foundation
 
 /// How wall-clock times read (the absolute reset labels): the system's 12/24-hour convention, or
 /// an explicit override — matching the original app's Auto/12h/24h setting.
-enum TimeFormatSetting: String, Hashable, Sendable, CaseIterable, UserDefaultsBacked {
+enum TimeFormatSetting: String, Hashable, Sendable, CaseIterable, SQLitePreferencesBacked {
     case auto
     case twelveHour = "12h"
     case twentyFourHour = "24h"
@@ -10,7 +10,7 @@ enum TimeFormatSetting: String, Hashable, Sendable, CaseIterable, UserDefaultsBa
     static let key = "timeFormat"
     static var fallback: TimeFormatSetting { .auto }
 
-    // `current` (the user's current choice, read live) comes from `UserDefaultsBacked`.
+    // `current` (the user's current choice, read live) comes from `SQLitePreferencesBacked`.
 
     var label: String {
         switch self {

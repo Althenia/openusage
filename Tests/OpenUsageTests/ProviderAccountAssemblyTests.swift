@@ -5,12 +5,8 @@ import XCTest
 /// identity map consumed by the snapshot cache stamp and the bare-id resolver.
 @MainActor
 final class ProviderAccountAssemblyTests: XCTestCase {
-    private func makeScratchDefaults() -> UserDefaults {
-        let suiteName = "OpenUsageTests.ProviderAccountAssembly.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        addTeardownBlock { defaults.removePersistentDomain(forName: suiteName) }
-        return defaults
+    private func makeScratchDefaults() -> AppPreferences {
+        TestPreferences.make()
     }
 
     func testResolvedFamiliesFeedIdentityKeysAndTheRegistry() async throws {

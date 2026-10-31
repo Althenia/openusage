@@ -64,10 +64,8 @@ final class LayoutBootstrapTests: XCTestCase {
         )
     }
 
-    private func makePersistence(_ name: String) -> (LayoutPersistence, UserDefaults) {
-        let suite = "OpenUsageTests.LayoutBootstrap.\(name).\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defaults.removePersistentDomain(forName: suite)
+    private func makePersistence(_ name: String) -> (LayoutPersistence, AppPreferences) {
+        let defaults = TestPreferences.make()
         return (LayoutPersistence(defaults: defaults, storageKey: "layout"), defaults)
     }
 }
