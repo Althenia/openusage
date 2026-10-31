@@ -8,6 +8,7 @@
 - Add the Antigravity Argon Weekly meter for the separate weekly allowance Antigravity reports, enabled and tucked below the caret by default
 
 ### Bug Fixes
+- Validate the signed appcast and prepare the canonical legacy updater manifest before publishing release assets
 - Show Claude's current individual plan names (Pro, Max, Ultra) in place of Max 5x and Max 20x; the Session meter appears only when Claude reports a five-hour window
 - Retire the live Codex Spark and Spark Weekly meters; historical Spark tokens, model breakdowns, and pricing are kept
 

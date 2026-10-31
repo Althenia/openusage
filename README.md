@@ -89,6 +89,18 @@ SwiftPM package, SwiftUI content hosted in an AppKit-owned `NSStatusItem` + cust
 
 Releases are automated: pushing a `v*` tag on `main` builds, signs, notarizes, and publishes a new version. A plain tag (`v0.7.1`) ships to everyone; a pre-release suffix (`v0.7.1-beta.1`) ships to the beta channel. The pipeline lives in [.github/workflows/release.yml](.github/workflows/release.yml), and the step-by-step is in the `release-swift` skill.
 
+### Release Preflight
+
+Before uploading release assets, the workflow generates the Sparkle appcast and checks that the new
+DMG has an EdDSA signature and no existing feed entries were dropped. Stable releases also download
+`latest.json` explicitly from `robinebers/openusage` tag `v0.6.28`, validate its version and nonempty
+platform entries with HTTPS URLs and signatures, and upload those original bytes alongside the DMG.
+The manifest stays outside Sparkle's feed folder. Beta releases do not download or require it.
+Manifest validation checks structure, not the legacy signatures' cryptographic validity, and does not
+rewrite or re-sign the file. Missing or invalid preflight inputs stop release publication.
+
+Run the focused preflight regressions with `python3 -B -m unittest script.tests.test_release_preflight -v`.
+
 ### Release setup (one-time)
 
 The release workflow needs these repository secrets (Settings → Secrets and variables → Actions):
