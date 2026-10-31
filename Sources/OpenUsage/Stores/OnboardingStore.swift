@@ -11,22 +11,22 @@ final class OnboardingStore {
     private static let customizeHintPendingKey = "openusage.onboarding.customizeHintPending"
 
     private(set) var isCustomizeHintPending: Bool
-    private let defaults: UserDefaults
+    private let preferences: AppPreferences
 
-    init(defaults: UserDefaults = .standard) {
-        self.defaults = defaults
-        self.isCustomizeHintPending = defaults.bool(forKey: Self.customizeHintPendingKey)
+    init(defaults preferences: AppPreferences = .standard) {
+        self.preferences = preferences
+        self.isCustomizeHintPending = preferences.bool(forKey: Self.customizeHintPendingKey)
     }
 
     func markCustomizeHintPending() {
         guard !isCustomizeHintPending else { return }
         isCustomizeHintPending = true
-        defaults.set(true, forKey: Self.customizeHintPendingKey)
+        preferences.set(true, forKey: Self.customizeHintPendingKey)
     }
 
     func dismissCustomizeHint() {
         guard isCustomizeHintPending else { return }
         isCustomizeHintPending = false
-        defaults.set(false, forKey: Self.customizeHintPendingKey)
+        preferences.set(false, forKey: Self.customizeHintPendingKey)
     }
 }

@@ -70,7 +70,7 @@ final class RefreshSettingTests: XCTestCase {
 
     // MARK: - Helpers
 
-    private func storeSnapshot(used: Double, age: TimeInterval, into suite: UserDefaults, now: Date) {
+    private func storeSnapshot(used: Double, age: TimeInterval, into suite: AppPreferences, now: Date) {
         let cache = ProviderSnapshotCache(userDefaults: suite, storageKey: "snapshots", now: { now })
         cache.store(ProviderSnapshot(
             providerID: "test",
@@ -101,7 +101,7 @@ final class RefreshSettingTests: XCTestCase {
     }
 
     /// Builds a store backed by a cache at the default (fixed) refresh-interval TTL — the relaunch case.
-    private func makeStore(runtime: CountingProviderRuntime, suite: UserDefaults, now: Date) -> WidgetDataStore {
+    private func makeStore(runtime: CountingProviderRuntime, suite: AppPreferences, now: Date) -> WidgetDataStore {
         WidgetDataStore(
             registry: WidgetRegistry(providers: [runtime.provider], descriptors: runtime.widgetDescriptors),
             providers: [runtime],
@@ -110,10 +110,7 @@ final class RefreshSettingTests: XCTestCase {
         )
     }
 
-    private func makeDefaults(_ name: String) -> UserDefaults {
-        let suiteName = "OpenUsageTests.RefreshSetting.\(name).\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        return defaults
+    private func makeDefaults(_ name: String) -> AppPreferences {
+        TestPreferences.make(name)
     }
 }

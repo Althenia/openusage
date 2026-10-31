@@ -33,11 +33,8 @@ final class UsageReaderTests: XCTestCase {
         }
     }
 
-    private func defaults() -> UserDefaults {
-        let suite = "UsageReaderTests.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defaults.removePersistentDomain(forName: suite)
-        return defaults
+    private func defaults() -> AppPreferences {
+        TestPreferences.make()
     }
 
     func testReadsSharedSnapshotCacheWithoutRefreshing() async throws {

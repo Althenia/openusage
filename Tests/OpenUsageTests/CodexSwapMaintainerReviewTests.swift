@@ -8,10 +8,8 @@ final class CodexSwapMaintainerReviewTests: XCTestCase {
     private let b = CodexAccountIdentity(accountID: "workspace-b", email: "work@example.com")!
     private let environment = FakeEnvironment(["CODEX_HOME": "/test/default", "XSWAP_HOME": "/test/swap"])
 
-    private func defaults() throws -> UserDefaults {
-        let suite = "CodexSwapMaintainer.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-        addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
+    private func defaults() throws -> AppPreferences {
+        let defaults = TestPreferences.make()
         return defaults
     }
 

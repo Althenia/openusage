@@ -16,6 +16,11 @@ snapshot cache. A normal read reuses snapshots less than five minutes old and re
 ones. `--force` is the CLI equivalent of the app's manual refresh: it bypasses that freshness gate and
 writes successful results to the same cache. Credentials are used locally and never appear in the output.
 
+The command opens the same [SQLite storage](storage.md) as the app and performs the one-time legacy
+import if needed. Both processes must inherit the same `XDG_DATA_HOME` to share a database; the command
+does not read a shell snapshot to choose its storage location. Storage failures exit with code `4`
+without falling back to old preferences or recreating a corrupt database.
+
 A provider argument names providers by plain string matching, exactly like the
 [local HTTP API](local-http-api.md): an exact provider ID names that provider, and a family ID
 (`claude`, `codex`) names every account card of that family — with one account that's exactly the one

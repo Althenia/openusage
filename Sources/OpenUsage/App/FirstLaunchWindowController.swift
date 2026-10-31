@@ -17,7 +17,9 @@ final class FirstLaunchWindowController: NSObject, NSWindowDelegate {
         window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
         window.delegate = self
-        window.contentView = NSHostingView(rootView: FirstLaunchWelcomeView(setup: setup, finish: finish))
+        window.contentView = NSHostingView(
+            rootView: FirstLaunchWelcomeView(setup: setup, finish: finish).environment(\.appPreferences, .standard)
+        )
         window.center()
         detectionTask = Task { await setup.detect() }
     }

@@ -32,7 +32,7 @@ final class CodexHistoryScopeTests: XCTestCase {
     }
 
     private func assemble(
-        defaults: UserDefaults, environment: [String: String] = [:]
+        defaults: AppPreferences, environment: [String: String] = [:]
     ) async -> ProviderAccountAssembly {
         let home = userHome!
         let observer = DefaultAccountObserver(

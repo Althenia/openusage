@@ -13,7 +13,7 @@ struct CustomizeProviderListView: View {
     let frameStore: ReorderFrameStore
 
     @State private var activeProviderID: String?
-    @AppStorage(DensitySetting.key) private var density = DensitySetting.regular
+    @SQLiteStorage(DensitySetting.key) private var density = DensitySetting.regular
 
     private var orderedRows: [ProviderRow] { layout.customizeProviderRows }
 

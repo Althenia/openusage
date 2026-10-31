@@ -127,7 +127,7 @@ final class FailureBackoffTests: XCTestCase {
         runtime: some ProviderRuntime,
         clock: @escaping () -> Date
     ) -> WidgetDataStore {
-        let suite = makeUserDefaults("backoff")
+        let suite = makePreferences("backoff")
         return WidgetDataStore(
             registry: WidgetRegistry(providers: [provider], descriptors: [descriptor]),
             providers: [runtime],
@@ -137,11 +137,8 @@ final class FailureBackoffTests: XCTestCase {
         )
     }
 
-    private func makeUserDefaults(_ name: String) -> UserDefaults {
-        let suiteName = "OpenUsageTests.Backoff.\(name).\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        return defaults
+    private func makePreferences(_ name: String) -> AppPreferences {
+        TestPreferences.make(name)
     }
 }
 

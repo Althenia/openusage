@@ -110,14 +110,11 @@ final class AntigravityLayoutTests: XCTestCase {
         LayoutStore(registry: .antigravityOnly, defaults: makeDefaults(name), storageKey: "layout")
     }
 
-    private func makeDefaults(_ name: String) -> UserDefaults {
-        let suiteName = "OpenUsageTests.AntigravityLayout.\(name).\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        return defaults
+    private func makeDefaults(_ name: String) -> AppPreferences {
+        TestPreferences.make(name)
     }
 
-    private func saveStored<T: Encodable>(_ value: T, forKey key: String, in defaults: UserDefaults) {
+    private func saveStored<T: Encodable>(_ value: T, forKey key: String, in defaults: AppPreferences) {
         defaults.set(try! JSONEncoder().encode(value), forKey: key)
     }
 }

@@ -159,9 +159,6 @@ final class CursorEnterpriseProviderTests: XCTestCase {
     func testRefreshCombinesEnterpriseMetersAndStillAppendsUsageHistory() async throws {
         let now = try XCTUnwrap(OpenUsageISO8601.date(from: "2026-07-13T12:00:00.000Z"))
         let accessToken = makeCursorJWT(sub: "google-oauth2|enterprise-user")
-        let historyDirectory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cursor-enterprise-history-\(UUID().uuidString)", isDirectory: true)
-        defer { try? FileManager.default.removeItem(at: historyDirectory) }
         let todayStart = Calendar.current.startOfDay(for: now)
         let todayStartMilliseconds = String(Int(todayStart.timeIntervalSince1970 * 1000))
         let http = RoutingHTTPClient { request in
@@ -245,7 +242,7 @@ final class CursorEnterpriseProviderTests: XCTestCase {
             usageClient: CursorUsageClient(http: http),
             now: { now },
             pricing: { TestPricing.bundled },
-            usageHistoryStore: CursorUsageHistoryStore(directory: historyDirectory)
+            usageHistoryStore: CursorUsageHistoryStore(store: TestPreferences.makeStore("cursorEnterpriseHistory"))
         )
 
         let snapshot = await provider.refresh()
@@ -313,14 +310,11 @@ final class CursorEnterpriseProviderTests: XCTestCase {
         return (used, limit)
     }
 
-    private func isolatedDefaults(_ name: String) -> UserDefaults {
-        let suiteName = "OpenUsageTests.CursorEnterprise.\(name).\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        return defaults
+    private func isolatedDefaults(_ name: String) -> AppPreferences {
+        TestPreferences.make(name)
     }
 
-    private func isolatedCache(_ defaults: UserDefaults) -> ProviderSnapshotCache {
+    private func isolatedCache(_ defaults: AppPreferences) -> ProviderSnapshotCache {
         ProviderSnapshotCache(userDefaults: defaults, storageKey: "snapshots", ttl: 600, now: { Date() })
     }
 }

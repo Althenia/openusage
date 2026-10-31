@@ -4,9 +4,8 @@ import XCTest
 /// Guards the in-memory write-through mirror: reads must reflect writes, a second store must not drop
 /// the first, and the mirror must stay a cache over real persistence (a fresh instance reads from disk).
 final class ProviderSnapshotCacheTests: XCTestCase {
-    private func makeDefaults() -> (UserDefaults, String) {
-        let suite = "providerSnapshotCache.test.\(UUID().uuidString)"
-        return (UserDefaults(suiteName: suite)!, suite)
+    private func makeDefaults() -> AppPreferences {
+        TestPreferences.make("providerSnapshotCache")
     }
 
     private func snapshot(_ id: String, used: Double, now: Date) -> ProviderSnapshot {
@@ -19,8 +18,7 @@ final class ProviderSnapshotCacheTests: XCTestCase {
     }
 
     func testStoreAccumulatesAcrossProvidersAndReadsReflectWrites() {
-        let (defaults, suite) = makeDefaults()
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = makeDefaults()
         let now = Date()
         let cache = ProviderSnapshotCache(userDefaults: defaults, storageKey: "k", ttl: 9_999, now: { now })
 
@@ -40,8 +38,7 @@ final class ProviderSnapshotCacheTests: XCTestCase {
     /// would wait out the previous session's remaining interval before refetching. It must still *display*
     /// (instant paint), so `loadSnapshots` returns it.
     func testRelaunchLoadedSnapshotIsStaleEvenWithinTTL() {
-        let (defaults, suite) = makeDefaults()
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = makeDefaults()
         let now = Date()
         // Session 1 writes a snapshot 1s ago — comfortably inside the 9_999s TTL.
         ProviderSnapshotCache(userDefaults: defaults, storageKey: "k", ttl: 9_999, now: { now })
@@ -60,13 +57,52 @@ final class ProviderSnapshotCacheTests: XCTestCase {
     /// refetching on the normal cadence (the session-write flag widens freshness on launch, it doesn't
     /// pin a snapshot fresh forever).
     func testSnapshotWrittenThisSessionExpiresAfterTTL() {
-        let (defaults, suite) = makeDefaults()
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = makeDefaults()
         var now = Date()
         let cache = ProviderSnapshotCache(userDefaults: defaults, storageKey: "k", ttl: 100, now: { now })
 
         cache.store(snapshot("alpha", used: 42, now: now))
         now = now.addingTimeInterval(101)
         XCTAssertNil(cache.snapshot(providerID: "alpha"))
+    }
+
+    func testTwoCacheInstancesWritingDisjointProvidersLoseNeitherEntry() {
+        let store = TestPreferences.makeStore("providerSnapshotCacheDisjoint")
+        let first = ProviderSnapshotCache(
+            userDefaults: TestPreferences.make(sharing: store, namespace: "app"),
+            storageKey: "k", ttl: 9_999, now: { Date() }
+        )
+        let second = ProviderSnapshotCache(
+            userDefaults: TestPreferences.make(sharing: store, namespace: "app"),
+            storageKey: "k", ttl: 9_999, now: { Date() }
+        )
+        let now = Date()
+
+        first.store(snapshot("alpha", used: 10, now: now), producedByIdentityKey: "identity-alpha")
+        second.store(snapshot("beta", used: 20, now: now), producedByIdentityKey: "identity-beta")
+        first.store(snapshot("gamma", used: 30, now: now))
+
+        let relaunched = ProviderSnapshotCache(
+            userDefaults: TestPreferences.make(sharing: store, namespace: "app"),
+            storageKey: "k", ttl: 9_999, now: { Date() }
+        )
+        let loaded = relaunched.loadSnapshots(providerIDs: ["alpha", "beta", "gamma"])
+        XCTAssertEqual(Set(loaded.keys), ["alpha", "beta", "gamma"])
+        XCTAssertEqual(relaunched.producedByIdentityKey(providerID: "alpha"), "identity-alpha")
+        XCTAssertEqual(relaunched.producedByIdentityKey(providerID: "beta"), "identity-beta")
+        XCTAssertNil(relaunched.producedByIdentityKey(providerID: "gamma"))
+    }
+
+    func testCorruptStoredPayloadRecoversToEmptyAndIsRewrittenByNextStore() {
+        let defaults = makeDefaults()
+        defaults.set(Data("{not json".utf8), forKey: "k")
+        let now = Date()
+        let cache = ProviderSnapshotCache(userDefaults: defaults, storageKey: "k", ttl: 9_999, now: { now })
+
+        XCTAssertTrue(cache.loadSnapshots(providerIDs: ["alpha"]).isEmpty)
+        cache.store(snapshot("alpha", used: 5, now: now))
+
+        let relaunched = ProviderSnapshotCache(userDefaults: defaults, storageKey: "k", ttl: 9_999, now: { now })
+        XCTAssertEqual(relaunched.loadSnapshots(providerIDs: ["alpha"]).count, 1)
     }
 }

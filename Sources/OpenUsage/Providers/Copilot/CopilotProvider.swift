@@ -2,7 +2,7 @@ import Foundation
 
 @MainActor
 final class CopilotProvider: ProviderRuntime {
-    /// `UserDefaults` key caching the slug of the org whose billing carried Copilot credit usage, so
+    /// preferences key caching the slug of the org whose billing carried Copilot credit usage, so
     /// steady-state refreshes make one billing call instead of re-probing every org.
     static let billingOrgDefaultsKey = "copilot.billingOrg"
 
@@ -19,20 +19,20 @@ final class CopilotProvider: ProviderRuntime {
     let authStore: CopilotAuthStore
     let usageClient: CopilotUsageClient
     let orgBillingClient: CopilotOrgBillingClient
-    let defaults: UserDefaults
+    let preferences: AppPreferences
     let now: @Sendable () -> Date
 
     init(
         authStore: CopilotAuthStore = CopilotAuthStore(),
         usageClient: CopilotUsageClient = CopilotUsageClient(),
         orgBillingClient: CopilotOrgBillingClient = CopilotOrgBillingClient(),
-        defaults: UserDefaults = .standard,
+        defaults preferences: AppPreferences = .standard,
         now: @escaping @Sendable () -> Date = Date.init
     ) {
         self.authStore = authStore
         self.usageClient = usageClient
         self.orgBillingClient = orgBillingClient
-        self.defaults = defaults
+        self.preferences = preferences
         self.now = now
     }
 
@@ -103,14 +103,14 @@ final class CopilotProvider: ProviderRuntime {
     /// member (only owners and billing managers can read org billing), so it degrades to today's
     /// plan-only card instead of erroring the provider.
     private func orgBillingLines(token: String) async -> [MetricLine] {
-        if let cached = defaults.string(forKey: Self.billingOrgDefaultsKey) {
+        if let cached = preferences.string(forKey: Self.billingOrgDefaultsKey) {
             do {
                 if let lines = try await usageLines(org: cached, token: token) {
                     return lines
                 }
                 // The cached org answered but no longer shows Copilot usage (left the org, lost the
                 // billing role, org stopped using Copilot) — forget it and re-probe from scratch.
-                defaults.removeObject(forKey: Self.billingOrgDefaultsKey)
+                preferences.removeObject(forKey: Self.billingOrgDefaultsKey)
             } catch {
                 // Transient failure: log it and keep the cached org for the next refresh.
                 AppLog.warn(LogTag.plugin("copilot"), "org billing lookup failed for the remembered org: \(error.localizedDescription)")
@@ -136,7 +136,7 @@ final class CopilotProvider: ProviderRuntime {
         for org in orgs {
             do {
                 if let lines = try await usageLines(org: org, token: token) {
-                    defaults.set(org, forKey: Self.billingOrgDefaultsKey)
+                    preferences.set(org, forKey: Self.billingOrgDefaultsKey)
                     return lines
                 }
             } catch {

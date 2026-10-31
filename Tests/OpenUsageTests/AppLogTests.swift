@@ -3,7 +3,7 @@ import XCTest
 
 /// Covers the crux of #604: the user's log level is a single floor that decides what actually reaches
 /// the file sink. The sink is pointed at a per-test temp file so we can read back exactly what the gate
-/// wrote. `AppLog.reloadLevel(_:)` applies a level without touching `UserDefaults.standard`, so these
+/// wrote. `AppLog.reloadLevel(_:)` applies a level without touching `AppPreferences.standard`, so these
 /// tests never race on global state.
 final class AppLogTests: XCTestCase {
     private var tempDir: URL!
@@ -97,9 +97,7 @@ final class AppLogTests: XCTestCase {
             descriptors: [],
             snapshot: ProviderSnapshot(providerID: provider.id, displayName: provider.displayName, lines: [])
         )
-        let defaultsName = "OpenUsageTests.AppLog.slow.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: defaultsName))
-        defer { defaults.removePersistentDomain(forName: defaultsName) }
+        let defaults = TestPreferences.make()
         var ticks = [100.0, 112.5]
         let store = WidgetDataStore(
             registry: WidgetRegistry(providers: [provider], descriptors: []),

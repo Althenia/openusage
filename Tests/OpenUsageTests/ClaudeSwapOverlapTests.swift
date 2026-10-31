@@ -5,9 +5,7 @@ extension ClaudeDesktopAuthStoreTests {
     @MainActor
     func testSwapDesktopOverlapKeepsTwoNamedIdentitiesAcrossDefaultSwitches() async throws {
         let fixture = try overlapFixture()
-        let suite = "ClaudeOverlap.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let defaults = TestPreferences.make()
         let accounts = ProviderAccountsStore(defaults: defaults)
         let fixtureHome = home
         let observer = DefaultAccountObserver(environment: FakeEnvironment([:]), files: fixture.files,

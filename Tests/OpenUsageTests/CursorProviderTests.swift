@@ -338,8 +338,7 @@ final class CursorProviderTests: XCTestCase {
             ),
             usageClient: CursorUsageClient(http: http),
             now: { Date(timeIntervalSince1970: 1_800_000_000) },
-            usageHistoryStore: CursorUsageHistoryStore(directory: FileManager.default.temporaryDirectory
-                .appendingPathComponent("cursor-provider-tests-\(UUID().uuidString)", isDirectory: true))
+            usageHistoryStore: CursorUsageHistoryStore(store: TestPreferences.makeStore("cursor-provider-tests"))
         )
 
         let snapshot = await provider.refresh()

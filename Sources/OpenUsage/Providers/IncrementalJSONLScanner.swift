@@ -230,12 +230,11 @@ actor IncrementalJSONLScanner<Item: Codable & Sendable> {
         }
     }
 
-    func cacheRecordURLForTesting(identity: String, filePath: String) -> URL? {
+    func cacheRecordLocationForTesting(identity: String, filePath: String) -> (namespace: String, key: String)? {
         guard let persistence else { return nil }
-        return JSONLScanCachePaths.recordURL(
-            persistence: persistence,
-            identity: identity,
-            fileName: JSONLScanCachePaths.recordFileName(path: filePath)
+        return (
+            JSONLScanCachePaths.storeNamespace(persistence: persistence, identity: identity),
+            JSONLScanCachePaths.recordKey(fileName: JSONLScanCachePaths.recordFileName(path: filePath))
         )
     }
 

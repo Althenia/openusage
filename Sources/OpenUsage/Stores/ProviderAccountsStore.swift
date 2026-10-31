@@ -65,12 +65,12 @@ struct ProviderAccountRecord: Codable, Equatable, Sendable {
 final class ProviderAccountsStore {
     static let storageKey = "openusage.providerAccounts.v1"
 
-    private let defaults: UserDefaults
+    private let preferences: AppPreferences
     private(set) var records: [ProviderAccountRecord]
 
-    init(defaults: UserDefaults = .standard) {
-        self.defaults = defaults
-        if let data = defaults.data(forKey: Self.storageKey) {
+    init(defaults preferences: AppPreferences = .standard) {
+        self.preferences = preferences
+        if let data = preferences.data(forKey: Self.storageKey) {
             do {
                 self.records = try JSONDecoder().decode([ProviderAccountRecord].self, from: data)
             } catch {
@@ -193,6 +193,6 @@ final class ProviderAccountsStore {
             AppLog.error(.config, "failed to encode provider-account records; keeping previous persisted state")
             return
         }
-        defaults.set(data, forKey: Self.storageKey)
+        preferences.set(data, forKey: Self.storageKey)
     }
 }

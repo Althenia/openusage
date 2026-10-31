@@ -62,3 +62,62 @@ final class UpdaterUserDriverDelegateTests: XCTestCase {
         XCTAssertTrue(resolved)
     }
 }
+
+@MainActor
+final class UpdaterPreferencesTests: XCTestCase {
+    private func makeController() -> UpdaterController {
+        UpdaterController(presentationController: UpdaterPresentationController(
+            activationPolicy: { .accessory },
+            isActive: { false },
+            setActivationPolicy: { _ in true },
+            activate: { _ in }
+        ))
+    }
+
+    func testBetaChannelDefaultsToStableWithoutWritingAnything() {
+        let preferences = TestPreferences.make("updater-default")
+        configureStandardPreferences(preferences)
+
+        let controller = makeController()
+
+        XCTAssertFalse(controller.betaChannelEnabled)
+        XCTAssertNil(preferences.object(forKey: UpdaterController.betaChannelDefaultsKey))
+    }
+
+    func testBetaChannelReadsTheSeededPreference() {
+        let preferences = TestPreferences.make("updater-seeded")
+        preferences.set(true, forKey: UpdaterController.betaChannelDefaultsKey)
+        configureStandardPreferences(preferences)
+
+        XCTAssertTrue(makeController().betaChannelEnabled)
+    }
+
+    func testChangingTheBetaChannelPersistsAndNewControllersReadIt() {
+        let preferences = TestPreferences.make("updater-persist")
+        preferences.set(true, forKey: UpdaterController.betaChannelDefaultsKey)
+        configureStandardPreferences(preferences)
+        let controller = makeController()
+
+        controller.betaChannelEnabled = false
+
+        XCTAssertEqual(preferences.object(forKey: UpdaterController.betaChannelDefaultsKey) as? Bool, false)
+        XCTAssertFalse(makeController().betaChannelEnabled)
+
+        controller.betaChannelEnabled = true
+
+        XCTAssertEqual(preferences.object(forKey: UpdaterController.betaChannelDefaultsKey) as? Bool, true)
+        XCTAssertTrue(makeController().betaChannelEnabled)
+    }
+
+    func testResetToDefaultsPersistsTheStableChannel() {
+        let preferences = TestPreferences.make("updater-reset")
+        preferences.set(true, forKey: UpdaterController.betaChannelDefaultsKey)
+        configureStandardPreferences(preferences)
+        let controller = makeController()
+
+        controller.resetToDefaults()
+
+        XCTAssertEqual(preferences.object(forKey: UpdaterController.betaChannelDefaultsKey) as? Bool, false)
+        XCTAssertFalse(makeController().betaChannelEnabled)
+    }
+}

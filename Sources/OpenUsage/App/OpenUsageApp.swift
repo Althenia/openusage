@@ -6,16 +6,17 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItemController: StatusItemController?
     private var firstLaunchWindow: FirstLaunchWindowController?
     private var singleInstanceLock: SingleInstanceLock.Token?
-    private let updater = UpdaterController()
+    private lazy var updater = UpdaterController()
+    private var storageErrorObserver: NSObjectProtocol?
+    private var storageErrorShown = false
 
     public override init() {
         super.init()
     }
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
-        // Open/trim the file log, seed the cached level, and emit the startup line BEFORE anything
-        // else logs, so the first lines of a session are captured.
-        AppLog.bootstrap()
+        AppLog.sink.open()
+        AppLog.reloadLevel(.fallback)
         // Kernel-level single-instance lock (#874): rejects a duplicate even when two copies launch
         // so close together that the workspace guard's LaunchServices snapshot misses the peer.
         var holdsLock = false
@@ -44,17 +45,26 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.terminate(nil)
             return
         }
-        // Versioned settings migration — replaces the old beta-era "wipe all settings on every update".
-        // MUST run before anything reads or writes UserDefaults (AppKit below, AppearanceSetting, and the
-        // AppContainer stores), so migrated values are in place when the stores load and a genuine fresh
-        // install still presents an empty domain — how the migrator tells a first launch from an upgrade.
-        // Nothing is wiped now; settings carry across updates. See `SettingsMigrator`.
-        // The fresh-install answer is captured BEFORE migrating (the schema stamp makes the domain
-        // non-empty) and handed to `AppContainer`, whose `FirstRunSeeder` starts with no providers on
-        // until the welcome screen turns on the user's picks.
-        let isFreshInstall = SettingsMigrator.isFreshInstall()
-        SettingsMigrator.migrate()
-        if isFreshInstall { FirstLaunchSetup.markPending() }
+        let isFreshInstall: Bool
+        do {
+            isFreshInstall = try StorageBootstrap.prepare(
+                bundleIdentifier: Bundle.main.bundleIdentifier ?? "com.robinebers.openusage.dev"
+            )
+        } catch {
+            AppLog.error(.config, "Local storage could not be opened: \(error.localizedDescription)")
+            showStorageError(error.localizedDescription, terminates: true)
+            return
+        }
+        AppLog.bootstrap()
+        storageErrorObserver = NotificationCenter.default.addObserver(
+            forName: AppPreferences.errorDidChangeNotification, object: nil, queue: .main
+        ) { [weak self] notification in
+            let message = (notification.object as? AppPreferences)?.lastError?.localizedDescription
+                ?? "A local value could not be read or saved. Existing stored data has been retained."
+            Task { @MainActor [weak self] in
+                self?.showStorageError(message, terminates: false)
+            }
+        }
         // Let only the `SMAppService` login item drive startup: opt out of AppKit's reopen-on-login
         // so a reboot doesn't also restore us and race the login item in the first place. The lock
         // above resolves same-bundle startup races even if both launch triggers fire; this just avoids
@@ -130,6 +140,18 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItemController = StatusItemController(container: container, updater: updater)
         // Starts background update checks (release build only; dormant under preview/`swift run`).
         updater.start()
+    }
+
+    private func showStorageError(_ message: String, terminates: Bool) {
+        guard !storageErrorShown else { return }
+        storageErrorShown = true
+        let alert = NSAlert()
+        alert.messageText = terminates ? "Local Storage Unavailable" : "Local Storage Error"
+        alert.informativeText = message
+        alert.alertStyle = .critical
+        alert.addButton(withTitle: terminates ? "Quit" : "OK")
+        alert.runModal()
+        if terminates { NSApp.terminate(nil) }
     }
 
     public func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {

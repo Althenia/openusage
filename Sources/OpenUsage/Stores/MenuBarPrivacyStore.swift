@@ -20,13 +20,13 @@ final class MenuBarPrivacyStore {
     /// cheap window-server call.
     static let pollInterval: Duration = .seconds(3)
 
-    /// The persisted preference (default off). Stored here rather than as a view-local `@AppStorage`
+    /// The persisted preference (default off). Stored here rather than as a view-local `@SQLiteStorage`
     /// so the AppKit strip renderer honors exactly the value the Settings toggle writes. Toggling it
     /// starts/stops the capture monitoring, so the off state costs nothing.
     var hideUsageWhileScreenSharing: Bool {
         didSet {
             guard hideUsageWhileScreenSharing != oldValue else { return }
-            defaults.set(hideUsageWhileScreenSharing, forKey: Self.key)
+            preferences.set(hideUsageWhileScreenSharing, forKey: Self.key)
             if hideUsageWhileScreenSharing {
                 startMonitoring()
             } else {
@@ -42,7 +42,7 @@ final class MenuBarPrivacyStore {
     /// True exactly when the menu bar should show the wordmark instead of usage values.
     var concealUsage: Bool { hideUsageWhileScreenSharing && screenIsCaptured }
 
-    @ObservationIgnored private let defaults: UserDefaults
+    @ObservationIgnored private let preferences: AppPreferences
     @ObservationIgnored private let probe: @MainActor () -> Bool
     @ObservationIgnored private let installChangeNotifications: @MainActor (@escaping @Sendable () -> Void) -> Void
     @ObservationIgnored private var pollTask: Task<Void, Never>?
@@ -50,14 +50,14 @@ final class MenuBarPrivacyStore {
     /// The probe and notification installer default to the real window-server signal
     /// (`ScreenCaptureProbe`) and are injectable so tests can pin the capture state deterministically.
     init(
-        defaults: UserDefaults = .standard,
+        defaults preferences: AppPreferences = .standard,
         probe: @escaping @MainActor () -> Bool = ScreenCaptureProbe.isScreenCaptured,
         installChangeNotifications: @escaping @MainActor (@escaping @Sendable () -> Void) -> Void = ScreenCaptureProbe.installChangeNotifications
     ) {
-        self.defaults = defaults
+        self.preferences = preferences
         self.probe = probe
         self.installChangeNotifications = installChangeNotifications
-        self.hideUsageWhileScreenSharing = defaults.bool(forKey: Self.key)
+        self.hideUsageWhileScreenSharing = preferences.bool(forKey: Self.key)
         // `didSet` doesn't fire during init; arm monitoring for a persisted-on launch directly.
         if hideUsageWhileScreenSharing {
             startMonitoring()

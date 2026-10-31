@@ -7,11 +7,10 @@ final class SettingsMigratorTests: XCTestCase {
     /// A genuine first launch (empty domain) records the current schema and runs no migrations — the
     /// stores seed their own current-shape defaults afterward.
     func testFreshInstallStampsCurrentAndRunsNothing() {
-        let (defaults, domain) = makeDefaults("Fresh")
-        defer { defaults.removePersistentDomain(forName: domain) }
+        let defaults = makeDefaults("Fresh")
 
         let result = SettingsMigrator.migrate(
-            defaults: defaults, domainName: domain, current: 3, migrations: recording(1, 2, 3)
+            defaults: defaults, current: 3, migrations: recording(1, 2, 3)
         )
 
         XCTAssertEqual(result, 3)
@@ -22,12 +21,11 @@ final class SettingsMigratorTests: XCTestCase {
     /// An install that predates the schema-version key (settings present, no version) is migrated forward
     /// from v0 — every step runs, in order, and existing settings are kept.
     func testLegacyInstallMigratesFromZeroAndKeepsSettings() {
-        let (defaults, domain) = makeDefaults("Legacy")
-        defer { defaults.removePersistentDomain(forName: domain) }
+        let defaults = makeDefaults("Legacy")
         defaults.set("custom", forKey: "openusage.layout.v1")  // pre-existing settings, no schema version
 
         let result = SettingsMigrator.migrate(
-            defaults: defaults, domainName: domain, current: 3, migrations: recording(1, 2, 3)
+            defaults: defaults, current: 3, migrations: recording(1, 2, 3)
         )
 
         XCTAssertEqual(result, 3)
@@ -39,12 +37,11 @@ final class SettingsMigratorTests: XCTestCase {
 
     /// A version jump runs only the pending intermediate steps in ascending order.
     func testCascadeRunsAllIntermediateStepsInOrder() {
-        let (defaults, domain) = makeDefaults("Cascade")
-        defer { defaults.removePersistentDomain(forName: domain) }
+        let defaults = makeDefaults("Cascade")
         defaults.set(1, forKey: SettingsMigrator.schemaVersionKey)
 
         let result = SettingsMigrator.migrate(
-            defaults: defaults, domainName: domain,
+            defaults: defaults,
             current: 4, migrations: recording(1, 2, 3, 4)
         )
 
@@ -54,12 +51,11 @@ final class SettingsMigratorTests: XCTestCase {
 
     /// Migrations declared out of order are still applied by ascending version.
     func testStepsApplyInAscendingOrderRegardlessOfDeclaration() {
-        let (defaults, domain) = makeDefaults("Order")
-        defer { defaults.removePersistentDomain(forName: domain) }
+        let defaults = makeDefaults("Order")
         defaults.set(0, forKey: SettingsMigrator.schemaVersionKey)
 
         SettingsMigrator.migrate(
-            defaults: defaults, domainName: domain,
+            defaults: defaults,
             current: 3, migrations: [recordingStep(3), recordingStep(1), recordingStep(2)]
         )
 
@@ -68,12 +64,11 @@ final class SettingsMigratorTests: XCTestCase {
 
     func testCurrentAndNewerVersionsNeverReplayMigrations() {
         for storedVersion in [3, 5] {
-            let (defaults, domain) = makeDefaults("NoReplay\(storedVersion)")
-            defer { defaults.removePersistentDomain(forName: domain) }
+            let defaults = makeDefaults("NoReplay\(storedVersion)")
             defaults.set(storedVersion, forKey: SettingsMigrator.schemaVersionKey)
 
             let result = SettingsMigrator.migrate(
-                defaults: defaults, domainName: domain, current: 3, migrations: recording(1, 2, 3)
+                defaults: defaults, current: 3, migrations: recording(1, 2, 3)
             )
 
             XCTAssertEqual(result, storedVersion)
@@ -85,12 +80,11 @@ final class SettingsMigratorTests: XCTestCase {
     /// A version bump with no data change for the top step still records reaching `current`, so the
     /// cascade isn't re-evaluated every launch.
     func testReachesCurrentEvenWhenTopVersionsHaveNoStep() {
-        let (defaults, domain) = makeDefaults("Gap")
-        defer { defaults.removePersistentDomain(forName: domain) }
+        let defaults = makeDefaults("Gap")
         defaults.set(0, forKey: SettingsMigrator.schemaVersionKey)
 
         let result = SettingsMigrator.migrate(
-            defaults: defaults, domainName: domain, current: 5, migrations: recording(1, 2)
+            defaults: defaults, current: 5, migrations: recording(1, 2)
         )
 
         XCTAssertEqual(result, 5)
@@ -103,12 +97,11 @@ final class SettingsMigratorTests: XCTestCase {
     /// The version is persisted after EACH step, and a failing step stops the cascade at the last
     /// success so the next launch resumes instead of replaying completed steps.
     func testFailureStopsCascadeAndResumesNextLaunch() {
-        let (defaults, domain) = makeDefaults("Failure")
-        defer { defaults.removePersistentDomain(forName: domain) }
+        let defaults = makeDefaults("Failure")
         defaults.set(0, forKey: SettingsMigrator.schemaVersionKey)
 
         let result = SettingsMigrator.migrate(
-            defaults: defaults, domainName: domain,
+            defaults: defaults,
             current: 3, migrations: [recordingStep(1), failingStep(2), recordingStep(3)]
         )
 
@@ -118,7 +111,7 @@ final class SettingsMigratorTests: XCTestCase {
 
         // Next launch, failure resolved: resumes from v1 and finishes without replaying v1.
         let resumed = SettingsMigrator.migrate(
-            defaults: defaults, domainName: domain, current: 3, migrations: recording(1, 2, 3)
+            defaults: defaults, current: 3, migrations: recording(1, 2, 3)
         )
         XCTAssertEqual(resumed, 3)
         XCTAssertEqual(ranVersions(defaults), [1, 2, 3], "resumes at v2; v1 not replayed")
@@ -130,14 +123,13 @@ final class SettingsMigratorTests: XCTestCase {
     /// `betaUpdatesEnabled` (and everything else) and dropping users off the Early Access channel. The
     /// migrator must NEVER discard settings — an up-to-date install keeps every key untouched.
     func testMigrateNeverWipesExistingSettings() {
-        let (defaults, domain) = makeDefaults("NoWipe")
-        defer { defaults.removePersistentDomain(forName: domain) }
+        let defaults = makeDefaults("NoWipe")
         defaults.set(true, forKey: "betaUpdatesEnabled")
         defaults.set("custom", forKey: "openusage.layout.v1")
         defaults.set(720.0, forKey: "openusage.panelHeight")
         defaults.set(SettingsSchema.current, forKey: SettingsMigrator.schemaVersionKey)
 
-        SettingsMigrator.migrate(defaults: defaults, domainName: domain)  // real (shipped) schema
+        SettingsMigrator.migrate(defaults: defaults)  // real (shipped) schema
 
         XCTAssertTrue(defaults.bool(forKey: "betaUpdatesEnabled"), "Early Access opt-in must survive updates")
         XCTAssertEqual(defaults.string(forKey: "openusage.layout.v1"), "custom")
@@ -147,11 +139,10 @@ final class SettingsMigratorTests: XCTestCase {
     /// A legacy install (no schema version) running the real, shipped schema keeps its settings while
     /// being stamped forward — today's schema ships zero migrations, so nothing is transformed or lost.
     func testLegacyInstallKeepsSettingsUnderShippedSchema() {
-        let (defaults, domain) = makeDefaults("LegacyReal")
-        defer { defaults.removePersistentDomain(forName: domain) }
+        let defaults = makeDefaults("LegacyReal")
         defaults.set(true, forKey: "betaUpdatesEnabled")
 
-        let result = SettingsMigrator.migrate(defaults: defaults, domainName: domain)
+        let result = SettingsMigrator.migrate(defaults: defaults)
 
         XCTAssertEqual(result, SettingsSchema.current)
         XCTAssertTrue(defaults.bool(forKey: "betaUpdatesEnabled"))
@@ -164,12 +155,11 @@ final class SettingsMigratorTests: XCTestCase {
     /// v2 era so none of them is later treated as "new" and probed.
     @MainActor  // `ProviderEnablementStore` (used to verify the migrated shape) is main-actor.
     func testV2ConvertsLegacyDisabledListToEnabledList() {
-        let (defaults, domain) = makeDefaults("V2Legacy")
-        defer { defaults.removePersistentDomain(forName: domain) }
+        let defaults = makeDefaults("V2Legacy")
         defaults.set(1, forKey: SettingsMigrator.schemaVersionKey)
         defaults.set(["devin", "grok"], forKey: "openusage.disabledProviders.v1")
 
-        let result = SettingsMigrator.migrate(defaults: defaults, domainName: domain)
+        let result = SettingsMigrator.migrate(defaults: defaults)
 
         XCTAssertEqual(result, SettingsSchema.current)
         let enabled = Set(defaults.stringArray(forKey: "openusage.enabledProviders.v1") ?? [])
@@ -190,12 +180,11 @@ final class SettingsMigratorTests: XCTestCase {
 
     /// A legacy install with no disabled providers (the all-on default) converts to all-on.
     func testV2ConvertsAllOnLegacyInstall() {
-        let (defaults, domain) = makeDefaults("V2AllOn")
-        defer { defaults.removePersistentDomain(forName: domain) }
+        let defaults = makeDefaults("V2AllOn")
         defaults.set(1, forKey: SettingsMigrator.schemaVersionKey)
         defaults.set("custom", forKey: "openusage.layout.v1")  // some settings, so not a fresh install
 
-        SettingsMigrator.migrate(defaults: defaults, domainName: domain)
+        SettingsMigrator.migrate(defaults: defaults)
 
         XCTAssertEqual(
             Set(defaults.stringArray(forKey: "openusage.enabledProviders.v1") ?? []),
@@ -206,12 +195,11 @@ final class SettingsMigratorTests: XCTestCase {
     /// An install already in enabled-list mode (fresh-installed after first-run detection shipped)
     /// keeps its enabled set untouched and only gains the known set.
     func testV2LeavesExistingEnabledListAloneAndSeedsKnownSet() {
-        let (defaults, domain) = makeDefaults("V2EnabledList")
-        defer { defaults.removePersistentDomain(forName: domain) }
+        let defaults = makeDefaults("V2EnabledList")
         defaults.set(1, forKey: SettingsMigrator.schemaVersionKey)
         defaults.set(["claude", "cursor"], forKey: "openusage.enabledProviders.v1")
 
-        SettingsMigrator.migrate(defaults: defaults, domainName: domain)
+        SettingsMigrator.migrate(defaults: defaults)
 
         XCTAssertEqual(
             Set(defaults.stringArray(forKey: "openusage.enabledProviders.v1") ?? []),
@@ -225,15 +213,14 @@ final class SettingsMigratorTests: XCTestCase {
 
     /// Re-running the v2 step (an interrupted upgrade replays it) changes nothing.
     func testV2IsIdempotent() {
-        let (defaults, domain) = makeDefaults("V2Idempotent")
-        defer { defaults.removePersistentDomain(forName: domain) }
+        let defaults = makeDefaults("V2Idempotent")
         defaults.set(1, forKey: SettingsMigrator.schemaVersionKey)
         defaults.set(["codex"], forKey: "openusage.disabledProviders.v1")
 
-        SettingsMigrator.migrate(defaults: defaults, domainName: domain)
+        SettingsMigrator.migrate(defaults: defaults)
         let enabledAfterFirst = defaults.stringArray(forKey: "openusage.enabledProviders.v1")
         defaults.set(1, forKey: SettingsMigrator.schemaVersionKey)  // simulate an interrupted upgrade
-        SettingsMigrator.migrate(defaults: defaults, domainName: domain)
+        SettingsMigrator.migrate(defaults: defaults)
 
         XCTAssertEqual(defaults.stringArray(forKey: "openusage.enabledProviders.v1"), enabledAfterFirst)
     }
@@ -243,15 +230,14 @@ final class SettingsMigratorTests: XCTestCase {
     /// Dead label-shaped pin IDs rewrite to the live registry IDs, preserving order and dropping a
     /// duplicate that appears only after remap (e.g. both `session` and `geminiPro` → one pin).
     func testV3RemapsDeadMenuBarPins() {
-        let (defaults, domain) = makeDefaults("V3DeadPins")
-        defer { defaults.removePersistentDomain(forName: domain) }
+        let defaults = makeDefaults("V3DeadPins")
         defaults.set(2, forKey: SettingsMigrator.schemaVersionKey)
         defaults.set(
             ["antigravity.session", "claude.session", "antigravity.weekly", "copilot.credits", "antigravity.geminiPro"],
             forKey: "openusage.layout.v1.menuBarPins"
         )
 
-        let result = SettingsMigrator.migrate(defaults: defaults, domainName: domain)
+        let result = SettingsMigrator.migrate(defaults: defaults)
 
         XCTAssertEqual(result, SettingsSchema.current)
         XCTAssertEqual(
@@ -262,28 +248,26 @@ final class SettingsMigratorTests: XCTestCase {
 
     /// Pins already on live registry IDs are left alone.
     func testV3LeavesAlreadyCorrectPinsUnchanged() {
-        let (defaults, domain) = makeDefaults("V3CorrectPins")
-        defer { defaults.removePersistentDomain(forName: domain) }
+        let defaults = makeDefaults("V3CorrectPins")
         defaults.set(2, forKey: SettingsMigrator.schemaVersionKey)
         let pins = ["antigravity.geminiPro", "antigravity.geminiWeekly", "copilot.premium"]
         defaults.set(pins, forKey: "openusage.layout.v1.menuBarPins")
 
-        SettingsMigrator.migrate(defaults: defaults, domainName: domain)
+        SettingsMigrator.migrate(defaults: defaults)
 
         XCTAssertEqual(defaults.stringArray(forKey: "openusage.layout.v1.menuBarPins"), pins)
     }
 
     /// Unknown / tombstone IDs (e.g. retired `geminiFlash`) are kept — only the known-dead aliases remap.
     func testV3KeepsUnknownPinIDs() {
-        let (defaults, domain) = makeDefaults("V3UnknownPins")
-        defer { defaults.removePersistentDomain(forName: domain) }
+        let defaults = makeDefaults("V3UnknownPins")
         defaults.set(2, forKey: SettingsMigrator.schemaVersionKey)
         defaults.set(
             ["antigravity.session", "antigravity.geminiFlash", "ghost.metric"],
             forKey: "openusage.layout.v1.menuBarPins"
         )
 
-        SettingsMigrator.migrate(defaults: defaults, domainName: domain)
+        SettingsMigrator.migrate(defaults: defaults)
 
         XCTAssertEqual(
             defaults.stringArray(forKey: "openusage.layout.v1.menuBarPins"),
@@ -293,8 +277,7 @@ final class SettingsMigratorTests: XCTestCase {
 
     /// Same remaps apply to the other layout keys that store metric IDs as strings.
     func testV3RemapsMetricIDsAcrossLayoutKeys() throws {
-        let (defaults, domain) = makeDefaults("V3LayoutKeys")
-        defer { defaults.removePersistentDomain(forName: domain) }
+        let defaults = makeDefaults("V3LayoutKeys")
         defaults.set(2, forKey: SettingsMigrator.schemaVersionKey)
         defaults.set(["antigravity.session", "copilot.credits"], forKey: "openusage.layout.v1.expandedMetrics")
         defaults.set(["antigravity.weekly"], forKey: "openusage.layout.v1.expandOnEnable")
@@ -316,7 +299,7 @@ final class SettingsMigratorTests: XCTestCase {
         ]
         defaults.set(try JSONEncoder().encode(placed), forKey: "openusage.layout.v1")
 
-        SettingsMigrator.migrate(defaults: defaults, domainName: domain)
+        SettingsMigrator.migrate(defaults: defaults)
 
         XCTAssertEqual(
             defaults.stringArray(forKey: "openusage.layout.v1.expandedMetrics"),
@@ -345,18 +328,17 @@ final class SettingsMigratorTests: XCTestCase {
 
     /// Re-running v3 (interrupted upgrade) is a no-op once IDs are already remapped.
     func testV3IsIdempotent() {
-        let (defaults, domain) = makeDefaults("V3Idempotent")
-        defer { defaults.removePersistentDomain(forName: domain) }
+        let defaults = makeDefaults("V3Idempotent")
         defaults.set(2, forKey: SettingsMigrator.schemaVersionKey)
         defaults.set(
             ["antigravity.session", "copilot.credits", "ghost.metric"],
             forKey: "openusage.layout.v1.menuBarPins"
         )
 
-        SettingsMigrator.migrate(defaults: defaults, domainName: domain)
+        SettingsMigrator.migrate(defaults: defaults)
         let pinsAfterFirst = defaults.stringArray(forKey: "openusage.layout.v1.menuBarPins")
         defaults.set(2, forKey: SettingsMigrator.schemaVersionKey)
-        SettingsMigrator.migrate(defaults: defaults, domainName: domain)
+        SettingsMigrator.migrate(defaults: defaults)
 
         XCTAssertEqual(defaults.stringArray(forKey: "openusage.layout.v1.menuBarPins"), pinsAfterFirst)
         XCTAssertEqual(pinsAfterFirst, ["antigravity.geminiPro", "copilot.premium", "ghost.metric"])
@@ -383,11 +365,8 @@ final class SettingsMigratorTests: XCTestCase {
 
     private static let ranKey = "test.ran"
 
-    private func makeDefaults(_ name: String) -> (UserDefaults, String) {
-        let suite = "OpenUsageTests.SettingsMigrator.\(name).\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defaults.removePersistentDomain(forName: suite)
-        return (defaults, suite)
+    private func makeDefaults(_ name: String) -> AppPreferences {
+        TestPreferences.make(name)
     }
 
     /// A migration that appends its version to a list in `defaults`, so a test can assert exactly which
@@ -410,7 +389,7 @@ final class SettingsMigratorTests: XCTestCase {
     }
 
     /// The recorded run order, or `nil` if no step ran.
-    private func ranVersions(_ defaults: UserDefaults) -> [Int]? {
+    private func ranVersions(_ defaults: AppPreferences) -> [Int]? {
         defaults.array(forKey: Self.ranKey) as? [Int]
     }
 

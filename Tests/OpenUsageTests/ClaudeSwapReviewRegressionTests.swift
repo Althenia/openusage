@@ -19,9 +19,7 @@ final class ClaudeSwapReviewRegressionTests: XCTestCase {
     func testUUIDOnlyDefaultRemainsAvailableAlongsideSwap() async throws {
         // A UUID alone must not be guessed to belong to a saved organization, even for the same user.
         for defaultUser in [user, "22222222-2222-2222-2222-222222222222"] {
-            let suite = "ClaudeSwapReview.\(UUID().uuidString)"
-            let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-            defer { defaults.removePersistentDomain(forName: suite) }
+            let defaults = TestPreferences.make()
             let files = FakeFiles([
                 home.path + "/.claude.json":
                     #"{"oauthAccount":{"accountUuid":"\#(defaultUser)","emailAddress":"default@example.com"}}"#,

@@ -4,16 +4,10 @@ import XCTest
 /// Fetch/cache/TTL behavior of the pricing store, with stubbed HTTP, an injected clock, and tiny
 /// fixture feeds.
 final class ModelPricingStoreTests: XCTestCase {
-    private var tempDir: URL!
+    private var cacheStore: SQLiteStore!
 
     override func setUpWithError() throws {
-        tempDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("pricing-store-tests-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
-    }
-
-    override func tearDownWithError() throws {
-        try? FileManager.default.removeItem(at: tempDir)
+        cacheStore = TestPreferences.makeStore("pricing")
     }
 
     private static let bundledFixtures: @Sendable (String) -> Data? = { name in
@@ -53,7 +47,7 @@ final class ModelPricingStoreTests: XCTestCase {
         let http = RoutingHTTPClient(handler: handler)
         let store = ModelPricingStore(
             http: http,
-            cacheDirectory: tempDir,
+            store: cacheStore,
             now: now,
             bundledData: Self.bundledFixtures
         )
@@ -83,12 +77,12 @@ final class ModelPricingStoreTests: XCTestCase {
     }
 
     func testNewerLegacyFeedKeepsBundledFallbackChoices() async throws {
-        try Data("""
+        try cacheStore.set(Data("""
         {"updated_at": "2099-01-01T00:00:00Z", "pricing": {}, "alias_rules": []}
-        """.utf8).write(to: tempDir.appendingPathComponent("supplement.json"))
+        """.utf8), namespace: "pricing", key: "supplement.json")
         let store = ModelPricingStore(
             http: RoutingHTTPClient(handler: { _ in throw URLError(.notConnectedToInternet) }),
-            cacheDirectory: tempDir,
+            store: cacheStore,
             bundledData: { name in
                 if name == "pricing_supplement" {
                     return Data("""
@@ -126,7 +120,7 @@ final class ModelPricingStoreTests: XCTestCase {
                 {"updated_at":"2099-01-01", "pricing":{}, "alias_rules":[], "fallback_models":{"codex":[]}}
                 """.utf8))
             }),
-            cacheDirectory: tempDir,
+            store: cacheStore,
             sourceURLs: [.supplement: URL(string: "https://example.com/supplement.json")!],
             bundledData: { name in
                 guard name == "pricing_supplement" else { return Self.bundledFixtures(name) }
@@ -245,8 +239,11 @@ final class ModelPricingStoreTests: XCTestCase {
     }
 
     private func writeSupplementCache(updatedAt: String?, autoInput: Double) throws {
-        try Data(Self.supplementJSON(updatedAt: updatedAt, autoInput: autoInput).utf8)
-            .write(to: tempDir.appendingPathComponent("supplement.json"), options: .atomic)
+        try cacheStore.set(
+            Data(Self.supplementJSON(updatedAt: updatedAt, autoInput: autoInput).utf8),
+            namespace: "pricing",
+            key: "supplement.json"
+        )
     }
 
     /// A store whose bundled supplement carries `updatedAt`, with the network dead so only the
@@ -255,7 +252,7 @@ final class ModelPricingStoreTests: XCTestCase {
         let json = Self.supplementJSON(updatedAt: updatedAt, autoInput: autoInput)
         return ModelPricingStore(
             http: RoutingHTTPClient(handler: { _ in throw URLError(.notConnectedToInternet) }),
-            cacheDirectory: tempDir,
+            store: cacheStore,
             bundledData: { name in
                 name == "pricing_supplement" ? Data(json.utf8) : Self.bundledFixtures(name)
             }

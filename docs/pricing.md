@@ -10,7 +10,7 @@ Prices are layered from three sources; when the same model appears in more than 
 2. **LiteLLM** — the community-maintained `model_prices_and_context_window.json`, covering the vast majority of API-priced models.
 3. **models.dev** — a gap-filler for models LiteLLM misses (e.g. some brand-new or niche models).
 
-The app ships with bundled snapshots of all three, so pricing works offline and on first launch. At runtime each source is refetched about once an hour (with ETag revalidation) and cached in `~/Library/Application Support/OpenUsage/pricing/`. A refresh never blocks a usage scan — scans always price against the freshest data already on hand.
+The app ships with bundled snapshots of all three, so pricing works offline and on first launch. At runtime each source is refetched about once an hour (with ETag revalidation) and cached in [local SQLite storage](storage.md). A refresh never blocks a usage scan — scans always price against the freshest data already on hand.
 
 Because the supplement is published to GitHub Pages on merge, a pricing correction reaches installed apps within about an hour — no app update needed.
 

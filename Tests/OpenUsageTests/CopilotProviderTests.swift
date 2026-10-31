@@ -478,7 +478,7 @@ final class CopilotProviderTests: XCTestCase {
         XCTAssertEqual(http.requests.count, 1)
     }
 
-    private func makeOrgProvider(http: RoutingHTTPClient, defaults: UserDefaults) -> CopilotProvider {
+    private func makeOrgProvider(http: RoutingHTTPClient, defaults: AppPreferences) -> CopilotProvider {
         CopilotProvider(
             authStore: editorTokenStore(),
             usageClient: CopilotUsageClient(http: http),
@@ -487,11 +487,8 @@ final class CopilotProviderTests: XCTestCase {
         )
     }
 
-    private func freshDefaults() -> UserDefaults {
-        let suiteName = "CopilotProviderTests-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        return defaults
+    private func freshDefaults() -> AppPreferences {
+        TestPreferences.make()
     }
 
     private func editorTokenStore() -> CopilotAuthStore {

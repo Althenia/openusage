@@ -12,7 +12,7 @@ struct ProviderSnapshotCache {
     }
 
     /// In-memory mirror of the persisted blob. Reads (`snapshot`, `loadSnapshots`, and the read inside
-    /// `store`) hit this instead of re-decoding the whole all-providers JSON from `UserDefaults` on
+    /// `store`) hit this instead of re-decoding the whole all-providers JSON from the preferences store on
     /// every call — a refresh pass otherwise paid O(N) full decodes (plus O(N) encodes) per pass on the
     /// MainActor. The blob is decoded at most once per cache instance (first access); writes update the
     /// mirror and persist through. Lock-backed so the value-type cache memoizes across calls and stays
@@ -26,7 +26,7 @@ struct ProviderSnapshotCache {
     /// same reason as `memo`: the value-type cache shares it across copies and stays safe. See #697.
     private let sessionWrites = OSAllocatedUnfairLock<Set<String>>(initialState: [])
 
-    private let userDefaults: UserDefaults
+    private let preferences: AppPreferences
     private let storageKey: String
     /// A snapshot written this session stays fresh for exactly one refresh interval, then expires so the
     /// periodic loop refetches on schedule. A snapshot loaded from a *previous* session (off disk) is never
@@ -41,7 +41,7 @@ struct ProviderSnapshotCache {
     private let decoder: JSONDecoder
 
     init(
-        userDefaults: UserDefaults = .standard,
+        userDefaults preferences: AppPreferences = .standard,
         // v3: spend / Codex credits / rate-limit-resets rows moved from `.text` (a parsed display string)
         // to `.values` (raw numbers). Bumping the key drops pre-upgrade caches so the new `.values`-based
         // widgets never try to resolve a stale `.text` line — which would misread the fused string
@@ -66,7 +66,7 @@ struct ProviderSnapshotCache {
         allowsPersistedFreshness: Bool = false,
         now: @escaping () -> Date = Date.init
     ) {
-        self.userDefaults = userDefaults
+        self.preferences = preferences
         self.storageKey = storageKey
         self.ttl = ttl
         self.allowsPersistedFreshness = allowsPersistedFreshness
@@ -116,16 +116,27 @@ struct ProviderSnapshotCache {
             return
         }
         AppLog.debug(.cache, "write \(snapshot.providerID)")
-        // Mark this provider as written *this session* so its snapshot now satisfies the freshness gate
-        // (a launch-loaded snapshot never does — see `sessionWrites`).
+        let persisted: Payload
+        do {
+            persisted = try preferences.transaction { transactional -> Payload in
+                var payload = decodeStoredPayload(from: transactional)
+                payload.snapshots[snapshot.providerID] = snapshot
+                // Stamp (or clear) the producing account alongside the entry. A nil identity must *clear* any
+                // prior stamp rather than keep it: the new snapshot is unattributable, and leaving the old
+                // account's stamp would falsely bless it at the next launch's identity check.
+                payload.producedByIdentityKeys[snapshot.providerID] = producedByIdentityKey
+                try transactional.trySet(try encoder.encode(payload), forKey: storageKey)
+                try transactional.checkError()
+                return payload
+            }
+        } catch {
+            AppLog.warn(.cache, "snapshot not persisted: \(error.localizedDescription)")
+            return
+        }
+        memo.withLock { $0 = persisted }
+        // Mark this provider as written *this session* only after the write is durable, so its snapshot now
+        // satisfies the freshness gate (a launch-loaded snapshot never does — see `sessionWrites`).
         sessionWrites.withLock { $0.insert(snapshot.providerID) }
-        var payload = loadPayload()
-        payload.snapshots[snapshot.providerID] = snapshot
-        // Stamp (or clear) the producing account alongside the entry. A nil identity must *clear* any
-        // prior stamp rather than keep it: the new snapshot is unattributable, and leaving the old
-        // account's stamp would falsely bless it at the next launch's identity check.
-        payload.producedByIdentityKeys[snapshot.providerID] = producedByIdentityKey
-        save(payload)
     }
 
     /// The account identity stamped when this provider's entry was stored, or `nil` when the entry is
@@ -151,21 +162,17 @@ struct ProviderSnapshotCache {
 
     private func loadPayload() -> Payload {
         if let mirror = memo.withLock({ $0 }) { return mirror }
-        // First access only: decode the persisted blob once, then mirror it. (Decoding outside the
-        // lock keeps `self` out of the `@Sendable` closure; cache access is MainActor-serialized in
-        // production, so the worst a race could do is decode twice into the same value — harmless.)
-        let loaded = decodeStoredPayload()
+        let loaded = decodeStoredPayload(from: preferences)
         memo.withLock { $0 = loaded }
         return loaded
     }
 
-    private func decodeStoredPayload() -> Payload {
+    private func decodeStoredPayload(from source: AppPreferences) -> Payload {
         // No stored data is the legitimate first-launch / cleared-cache case — recover to empty
         // silently. Data present but undecodable is a real problem (post-upgrade schema drift, a
-        // half-written blob, a manual `defaults` edit): fail loudly, then recover to empty. A silent
-        // drop here empties ALL providers' caches at once and feeds the refresh storm. Mirrors the
-        // loud `save` path above. Runs at most once per cache instance (then memoized).
-        guard let data = userDefaults.data(forKey: storageKey) else {
+        // half-written blob): fail loudly, then recover to empty. A silent drop here empties ALL
+        // providers' caches at once and feeds the refresh storm.
+        guard let data = source.data(forKey: storageKey) else {
             return Payload(snapshots: [:], producedByIdentityKeys: [:])
         }
         do {
@@ -173,20 +180,6 @@ struct ProviderSnapshotCache {
         } catch {
             AppLog.warn(.cache, "cache decode failed, dropping stored snapshots: \(error.localizedDescription)")
             return Payload(snapshots: [:], producedByIdentityKeys: [:])
-        }
-    }
-
-    private func save(_ payload: Payload) {
-        // Update the in-memory mirror first so subsequent reads see this write even if the encode
-        // below fails (the running session stays correct; only persistence is best-effort).
-        memo.withLock { $0 = payload }
-        // Fail loudly: a swallowed encode error would silently drop a snapshot from the persisted
-        // cache. No behavior change (the write is still best-effort), but the failure is now visible.
-        do {
-            let data = try encoder.encode(payload)
-            userDefaults.set(data, forKey: storageKey)
-        } catch {
-            AppLog.warn(.cache, "encode failed, snapshot not persisted: \(error.localizedDescription)")
         }
     }
 }

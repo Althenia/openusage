@@ -39,9 +39,9 @@ enum LogTag: String, Sendable {
 /// Debug in Settings is what surfaces debug lines in both the file and `log stream` (see
 /// `docs/debugging.md`) — matching #604's "Debug only when the user opts in".
 ///
-/// The level is cached (not re-read from `UserDefaults` on every call, which would be wasteful on the
+/// The level is cached (not re-read from the preferences store on every call, which would be wasteful on the
 /// hot `[http]`/`[cache]` paths) and refreshed by `reloadLevel()` from the Settings `.onChange` and at
-/// `bootstrap()`. A programmatic `UserDefaults` write outside the picker won't propagate until the next
+/// `bootstrap()`. A programmatic preferences write outside the picker won't propagate until the next
 /// `reloadLevel()` — acceptable since the picker is the only writer.
 enum AppLog {
     private enum Level: Int {
@@ -102,8 +102,8 @@ enum AppLog {
         apply(LogLevelSetting.current.severity)
     }
 
-    /// Apply a level directly, bypassing `UserDefaults`. The seam tests use to exercise the gate
-    /// without racing on global `UserDefaults.standard` state.
+    /// Apply a level directly, bypassing the preferences store. The seam tests use to exercise the gate
+    /// without racing on global `AppPreferences.standard` state.
     static func reloadLevel(_ level: LogLevelSetting) {
         apply(level.severity)
     }

@@ -171,10 +171,7 @@ final class ProviderEnablementStoreTests: XCTestCase {
         wait(for: [notPosted], timeout: 0.2)
     }
 
-    private func makeDefaults(_ name: String) -> UserDefaults {
-        let suiteName = "OpenUsageTests.Enablement.\(name).\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        return defaults
+    private func makeDefaults(_ name: String) -> AppPreferences {
+        TestPreferences.make(name)
     }
 }

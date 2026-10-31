@@ -12,11 +12,11 @@ enum ReduceAnimationsSetting {
     }
 
     /// Live value for imperative AppKit animation sites. SwiftUI reads the same two inputs through
-    /// `@AppStorage` and `accessibilityReduceMotion` in `ReduceAnimationsModifier`.
+    /// `@SQLiteStorage` and `accessibilityReduceMotion` in `ReduceAnimationsModifier`.
     @MainActor
     static var isEnabled: Bool {
         resolve(
-            appPreference: UserDefaults.standard.bool(forKey: key),
+            appPreference: AppPreferences.standard.bool(forKey: key),
             systemReduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         )
     }

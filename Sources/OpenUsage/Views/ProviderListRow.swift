@@ -14,7 +14,7 @@ struct ProviderListRow<Handle: View>: View {
     var onToggle: ((Bool) -> Void) = { _ in }
     var onOpen: () -> Void = {}
 
-    @AppStorage(DensitySetting.key) private var density = DensitySetting.regular
+    @SQLiteStorage(DensitySetting.key) private var density = DensitySetting.regular
 
     var body: some View {
         HStack(spacing: 10) {

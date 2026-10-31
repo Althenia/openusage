@@ -22,8 +22,8 @@ showing the old account's limits and plan under the new login.
 
 A cached value only counts as *fresh* (skip-a-refresh fresh) when it was fetched **during the current running session**. So a value cached in an earlier session always re-fetches on the first pass after launch — you still see it instantly, but the app never waits out the old interval before getting live numbers. This matters after an update: a new app version refreshes right away instead of showing the previous version's data until its interval lapses. Within a session, a freshly fetched value then counts as fresh for one refresh interval before the next pass re-fetches it.
 
-Claude, Codex, and pi spend history has a separate local-log parse cache under
-`~/Library/Application Support/OpenUsage/log-scan-cache/`. It stores parsed usage events before OpenUsage
+Claude, Codex, Grok, and pi spend history has a separate local-log parse cache in
+[local SQLite storage](storage.md). It stores parsed usage events before OpenUsage
 applies model-rate estimates, so pricing updates take effect without re-reading unchanged JSONL. On
 relaunch, an entry is reused only when its path, size, modification time, and parser version still match.
 Same-home cards share parsed data, and changing one source file rewrites only that file's record. Old files

@@ -10,7 +10,7 @@ final class PanelHeightController {
 
     private let panel: MenuBarPanel
     private let currentScreen: () -> PopoverScreen
-    private let defaults: UserDefaults
+    private let preferences: AppPreferences
 
     private var anchorScreen: NSScreen?
     private var anchorTopLeft: NSPoint?
@@ -19,11 +19,11 @@ final class PanelHeightController {
 
     init(
         panel: MenuBarPanel,
-        defaults: UserDefaults = .standard,
+        defaults preferences: AppPreferences = .standard,
         currentScreen: @escaping () -> PopoverScreen
     ) {
         self.panel = panel
-        self.defaults = defaults
+        self.preferences = preferences
         self.currentScreen = currentScreen
     }
 
@@ -120,12 +120,12 @@ final class PanelHeightController {
     }
 
     private func loadHeight(for screen: PopoverScreen) -> CGFloat? {
-        let value = defaults.double(forKey: Self.heightKey(for: screen))
+        let value = preferences.double(forKey: Self.heightKey(for: screen))
         return value > 0 ? CGFloat(value) : nil
     }
 
     private func saveHeight(_ height: CGFloat, for screen: PopoverScreen) {
-        defaults.set(Double(height), forKey: Self.heightKey(for: screen))
+        preferences.set(Double(height), forKey: Self.heightKey(for: screen))
     }
 
     private static func heightKey(for screen: PopoverScreen) -> String {
