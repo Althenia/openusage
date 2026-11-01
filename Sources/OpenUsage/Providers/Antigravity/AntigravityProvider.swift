@@ -301,14 +301,14 @@ final class AntigravityProvider: ProviderRuntime {
         // even one with zero usable buckets — is the answer and must never fall into the legacy chain
         // below, which fabricates "fully used" from missing quota info. A 404 (build without the RPC)
         // reads as `.unavailable` and falls through.
-        switch await usageClient.cloudCode(path: AntigravityUsageClient.quotaSummaryPath, token: token, userAgent: "antigravity", body: [:]) {
+        switch await usageClient.cloudCode(path: AntigravityUsageClient.quotaSummaryPath, token: token, userAgent: AntigravityUsageClient.userAgent, body: [:]) {
         case .authFailed:
             return .authFailed
         case .ok(let data):
             if let summaryLines = AntigravityUsageMapper.parseQuotaSummary(data) {
                 var lines = summaryLines
                 if !summaryLines.isEmpty && !summaryLines.contains(where: { $0.label == AntigravityMetric.sessionLabel }) {
-                    if case .ok(let modelsData) = await usageClient.cloudCode(path: AntigravityUsageClient.fetchModelsPath, token: token, userAgent: "antigravity", body: [:]) {
+                    if case .ok(let modelsData) = await usageClient.cloudCode(path: AntigravityUsageClient.fetchModelsPath, token: token, userAgent: AntigravityUsageClient.userAgent, body: [:]) {
                         let configs = AntigravityUsageMapper.parseCloudCodeModels(modelsData)
                         lines = AntigravityUsageMapper.supplementMissingSession(in: summaryLines, from: configs)
                     } else {
@@ -323,7 +323,7 @@ final class AntigravityProvider: ProviderRuntime {
         }
 
         // Legacy: fetchAvailableModels — the full Antigravity model set (Gemini + Claude + GPT-OSS).
-        switch await usageClient.cloudCode(path: AntigravityUsageClient.fetchModelsPath, token: token, userAgent: "antigravity", body: [:]) {
+        switch await usageClient.cloudCode(path: AntigravityUsageClient.fetchModelsPath, token: token, userAgent: AntigravityUsageClient.userAgent, body: [:]) {
         case .authFailed:
             return .authFailed
         case .ok(let data):

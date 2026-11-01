@@ -63,6 +63,45 @@ final class AntigravityPartialQuotaSummaryTests: XCTestCase {
     // MARK: - Cloud Code partial summary
 
     @MainActor
+    func testCloudCodeSendsAntigravityHubUserAgentAndParsesFullSummaryWithWeekly() async {
+        let fullGroupsJSON = """
+        "groups":[
+          {"displayName":"Gemini Models","buckets":[
+            {"bucketId":"gemini-weekly","displayName":"Weekly Limit Remaining","window":"weekly","remainingFraction":0.23,"resetTime":"2026-11-05T02:47:09Z"},
+            {"bucketId":"gemini-5h","displayName":"Five Hour Limit Remaining","window":"5h","remainingFraction":0.78,"resetTime":"2026-11-01T09:20:37Z"}
+          ]},
+          {"displayName":"Claude and GPT models","buckets":[
+            {"bucketId":"3p-weekly","displayName":"Weekly Limit Remaining","window":"weekly","remainingFraction":0.05,"resetTime":"2026-11-05T05:05:07Z"},
+            {"bucketId":"3p-5h","displayName":"Five Hour Limit Remaining","window":"5h","remainingFraction":0.98,"resetTime":"2026-11-01T09:42:41Z"}
+          ]}
+        ]
+        """
+        let routing = RoutingHTTPClient { request in
+            let path = request.url.path
+            if path.contains("retrieveUserQuotaSummary") {
+                return HTTPResponse(statusCode: 200, headers: [:], body: Data("{\(fullGroupsJSON)}".utf8))
+            }
+            if path.contains("loadCodeAssist") {
+                return HTTPResponse(statusCode: 200, headers: [:], body: Data(#"{"paidTier":{"name":"Google AI Pro"}}"#.utf8))
+            }
+            return HTTPResponse(statusCode: 404, headers: [:], body: Data())
+        }
+        let provider = makeCloudCodeProvider(routing: routing)
+
+        let snapshot = await provider.refresh()
+        XCTAssertEqual(snapshot.plan, "Pro")
+        let request = routing.requests.first { $0.url.path.contains("retrieveUserQuotaSummary") }
+        let userAgent = request?.headers["User-Agent"]
+        XCTAssertNotNil(userAgent)
+        XCTAssertTrue(userAgent?.hasPrefix("antigravity/hub/2.26.0") == true)
+        XCTAssertEqual(snapshot.lines.map(\.label), ["Session", "Weekly", "Claude", "Claude Weekly"])
+        XCTAssertEqual(snapshot.lines.map { self.used($0) }, [22, 77, 2, 95])
+        let weekly = snapshot.lines.first { $0.label == "Weekly" }
+        XCTAssertEqual(self.resetsAt(weekly), OpenUsageISO8601.date(from: "2026-11-05T02:47:09Z"))
+        XCTAssertEqual(self.periodMs(weekly), MetricPeriod.weekMs)
+    }
+
+    @MainActor
     func testCloudCodePartialSummarySupplementsGeminiSessionFromFetchAvailableModels() async {
         let groupsJSON = partial3pOnlyGroupsJSON
         let modelsJSON = """

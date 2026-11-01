@@ -36,7 +36,14 @@ struct AntigravityUsageClient: Sendable {
     // for the refresh-token grant — without it we can't refresh the keychain token when the app is closed.
     static let googleClientID = "1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com"
     static let googleClientSecret = "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"
-    static let lsMetadata = ["ideName": "antigravity", "extensionName": "antigravity", "ideVersion": "unknown", "locale": "en"]
+    #if arch(arm64)
+    static let arch = "arm64"
+    #else
+    static let arch = "x86_64"
+    #endif
+    static let clientVersion = "2.26.0"
+    static let userAgent = "antigravity/hub/\(clientVersion) (aidev_client; os_type=darwin; arch=\(arch))"
+    static let lsMetadata = ["ideName": "antigravity", "extensionName": "antigravity", "ideVersion": clientVersion, "locale": "en"]
 
     /// Loopback session that trusts the LS's self-signed cert; remote calls use full validation.
     var lsHTTP: HTTPClient
