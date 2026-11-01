@@ -81,6 +81,47 @@ enum AntigravityUsageMapper {
         }
     }
 
+    /// Supplements a partial quota summary with the Gemini session meter built from live model configs
+    /// when the summary reports 3p buckets but lacks the Gemini session pool.
+    ///
+    /// The authoritative summary takes precedence for every bucket it reports. Weekly limits are
+    /// never fabricated from 5h model data; if the backend summary lacks Gemini weekly, that meter
+    /// stays absent (truthfully "No data").
+    static func supplementMissingSession(in summaryLines: [MetricLine], from configs: [AntigravityModelConfig]) -> [MetricLine] {
+        guard !summaryLines.isEmpty,
+              !summaryLines.contains(where: { $0.label == AntigravityMetric.sessionLabel })
+        else {
+            return summaryLines
+        }
+
+        let modelLines = buildLines(configs)
+        guard let sessionLine = modelLines.first(where: { $0.label == AntigravityMetric.sessionLabel }) else {
+            AppLog.warn(LogTag.plugin("antigravity"), "quota summary lacks Gemini session pool and no Gemini models found in model configs")
+            return summaryLines
+        }
+
+        AppLog.warn(LogTag.plugin("antigravity"), "quota summary lacks Gemini session pool; supplemented 5h pool from live model configs (weekly limit unavailable)")
+
+        var combined = summaryLines
+        combined.append(sessionLine)
+        let order = summaryBuckets.map(\.label)
+        return combined.sorted { a, b in
+            let idxA = order.firstIndex(of: a.label) ?? Int.max
+            let idxB = order.firstIndex(of: b.label) ?? Int.max
+            return idxA < idxB
+        }
+    }
+
+    /// Returns true if the configs contain at least one usable model belonging to the Gemini pool.
+    static func hasGeminiModel(_ configs: [AntigravityModelConfig]) -> Bool {
+        configs.contains { config in
+            let label = config.label.trimmingCharacters(in: .whitespaces)
+            guard !label.isEmpty else { return false }
+            if let id = config.modelID, modelBlacklist.contains(id) { return false }
+            return poolLabel(normalizeLabel(label)) == AntigravityMetric.sessionLabel
+        }
+    }
+
     // MARK: - Response parsing (legacy per-model endpoints)
 
     /// LS `GetUserStatus` → plan name + model configs. Nil when the body has no `userStatus`.

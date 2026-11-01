@@ -168,14 +168,26 @@ final class AntigravityProvider: ProviderRuntime {
             // answer must never fall through to them. Empty lines render as "No data" rows.
             if let summary = await usageClient.callLS(scheme: endpoint.scheme, port: endpoint.port, csrf: discovered.csrf, method: "RetrieveUserQuotaSummary") {
                 if (200..<300).contains(summary.statusCode) {
-                    if let lines = AntigravityUsageMapper.parseQuotaSummary(summary.body) {
+                    if let summaryLines = AntigravityUsageMapper.parseQuotaSummary(summary.body) {
                         // The plan comes from an independent GetUserStatus call; the summary never
                         // gates on it — a failed plan lookup just leaves the plan blank.
                         var plan: String?
+                        var configs: [AntigravityModelConfig] = []
                         if let status = await usageClient.callLS(scheme: endpoint.scheme, port: endpoint.port, csrf: discovered.csrf, method: "GetUserStatus"),
                            (200..<300).contains(status.statusCode) {
-                            plan = AntigravityUsageMapper.parseUserStatus(status.body)?.plan
+                            if let parsed = AntigravityUsageMapper.parseUserStatus(status.body) {
+                                plan = parsed.plan
+                                configs = parsed.configs
+                            }
                         }
+                        if !AntigravityUsageMapper.hasGeminiModel(configs) && !summaryLines.isEmpty && !summaryLines.contains(where: { $0.label == AntigravityMetric.sessionLabel }) {
+                            if let fallback = await usageClient.callLS(scheme: endpoint.scheme, port: endpoint.port, csrf: discovered.csrf, method: "GetCommandModelConfigs"),
+                               (200..<300).contains(fallback.statusCode),
+                               let fallbackConfigs = AntigravityUsageMapper.parseCommandModelConfigs(fallback.body) {
+                                configs.append(contentsOf: fallbackConfigs)
+                            }
+                        }
+                        let lines = AntigravityUsageMapper.supplementMissingSession(in: summaryLines, from: configs)
                         return StrategyResult(plan: plan, lines: lines)
                     }
                     // 2xx but not a summary payload — the parser warned; fall to the legacy flow.
@@ -293,7 +305,16 @@ final class AntigravityProvider: ProviderRuntime {
         case .authFailed:
             return .authFailed
         case .ok(let data):
-            if let lines = AntigravityUsageMapper.parseQuotaSummary(data) {
+            if let summaryLines = AntigravityUsageMapper.parseQuotaSummary(data) {
+                var lines = summaryLines
+                if !summaryLines.isEmpty && !summaryLines.contains(where: { $0.label == AntigravityMetric.sessionLabel }) {
+                    if case .ok(let modelsData) = await usageClient.cloudCode(path: AntigravityUsageClient.fetchModelsPath, token: token, userAgent: "antigravity", body: [:]) {
+                        let configs = AntigravityUsageMapper.parseCloudCodeModels(modelsData)
+                        lines = AntigravityUsageMapper.supplementMissingSession(in: summaryLines, from: configs)
+                    } else {
+                        AppLog.warn(LogTag.plugin("antigravity"), "quota summary lacks Gemini session pool and fetchAvailableModels was unavailable")
+                    }
+                }
                 return .success(StrategyResult(plan: await loadPlan(token: token), lines: lines))
             }
             // 2xx but not a summary payload — the parser warned; fall to the legacy chain.
