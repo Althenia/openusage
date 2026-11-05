@@ -18,6 +18,7 @@ What the app does and how it behaves. These pages describe **behavior, not visua
 
 - [Command-line interface](cli.md) — one-shot cached and forced usage reads for agents and scripts
 - [Local HTTP API](local-http-api.md) — read your usage from other apps on `127.0.0.1:6736`
+- [YCoding](ycoding.md) — provider connections and usage kept separate by profile
 - [Proxy](proxy.md) — route provider requests through SOCKS5 or HTTP(S)
 
 ## Providers

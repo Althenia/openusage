@@ -5,7 +5,7 @@ import Foundation
 /// tail lives in one place instead of a byte-identical copy per provider; each scanner keeps only its
 /// format-specific parse/pricing loop.
 ///
-/// Days are keyed by the shared local-calendar `dayKey`, matching `SpendTileMapper`'s Today / Yesterday
+/// Days use Gregorian keys in the local time zone, matching `SpendTileMapper`'s Today / Yesterday
 /// lookup — the day-key contract is one function, not five copies (drift here is the class of bug behind
 /// the ccusage false-zero fix). Only priced rows are added (every scanner skips unpriceable rows before
 /// counting), so every counted day carries a real cost; unpriceable models are tracked separately for
@@ -17,12 +17,18 @@ struct DailyUsageAccumulator {
     private var modelsByDay: [String: [String: ModelAccumulator]] = [:]
     private var fallbackPricingModelsByDay: [String: Set<String>] = [:]
 
-    /// Local calendar day as `yyyy-MM-dd`. The single day-key contract shared by the accumulator,
-    /// `SpendTileMapper`, and the Cursor usage-history aggregation. `calendar` is injectable for tests; production
-    /// uses `.current`.
+    /// Gregorian `yyyy-MM-dd` storage key in the caller's time zone. User calendar preferences affect
+    /// display, never stored history or serialized day keys: the same instant must not change years or months
+    /// when a Mac switches to Buddhist, Hebrew, or another calendar. The injected calendar contributes
+    /// only its time zone, preserving local day boundaries for every usage source.
     static func dayKey(from date: Date, calendar: Calendar = .current) -> String {
-        let components = calendar.dateComponents([.year, .month, .day], from: date)
-        return String(format: "%04d-%02d-%02d", components.year ?? 0, components.month ?? 0, components.day ?? 0)
+        var gregorian = Calendar(identifier: .gregorian)
+        gregorian.timeZone = calendar.timeZone
+        let components = gregorian.dateComponents([.year, .month, .day], from: date)
+        return String(
+            format: "%04d-%02d-%02d", locale: Locale(identifier: "en_US_POSIX"),
+            components.year ?? 0, components.month ?? 0, components.day ?? 0
+        )
     }
 
     /// Add a priced row's tokens + cost, attributed to `model` on `day`.

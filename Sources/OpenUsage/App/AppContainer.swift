@@ -67,12 +67,19 @@ final class AppContainer {
         self.shellEnvironmentSnapshotTask = ShellEnvironmentSnapshotStore(defaults: .standard).startRefreshTask()
         // The launch account pass: which account is signed in at each family's default home. Feeds
         // the snapshot cache's account stamp and reconciles the account registry.
-        let accountAssembly = await ProviderAccountAssembly.make(waitsForLoginShell: true)
+        let ycoding = await YCodingProviderAssembly.make()
+        let accountAssembly = await ProviderAccountAssembly.make(
+            waitsForLoginShell: true,
+            excludingYCodingFamilies: YCodingConnectionBridge.replacedLegacyFamilies
+        )
+        let identityKeys = accountAssembly.identityKeysByCard.merging(ycoding.identityKeysByCard) { _, new in new }
 
         let providers = ProviderCatalog.make(
             claudeCards: accountAssembly.claudeCards,
             codex: accountAssembly.codex,
-            claudeIdentityKeys: accountAssembly.identityKeysByCard
+            claudeIdentityKeys: accountAssembly.identityKeysByCard,
+            excludingYCodingFamilies: YCodingConnectionBridge.replacedLegacyFamilies,
+            ycodingProviders: ycoding.providers
         )
         let registry = WidgetRegistry.from(providers)
         let apiKeyProviders = providers.compactMap { $0 as? any APIKeyManaging }
@@ -94,7 +101,7 @@ final class AppContainer {
             isProviderEnabled: { [enablement] in enablement.isEnabled($0) },
             orderedDescriptors: { [layout] in layout.visiblePlaced.compactMap { layout.descriptor(for: $0) } },
             notificationSettings: { notificationSettings },
-            providerIdentityKeys: accountAssembly.identityKeysByCard
+            providerIdentityKeys: identityKeys
         )
         let iCloudSync = ICloudUsageSyncStore(dataStore: dataStore)
         // Re-enabling a provider should fetch it promptly, so clear any leftover failure backoff before

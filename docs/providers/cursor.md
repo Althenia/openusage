@@ -29,7 +29,11 @@ into the Grok CLI is not required.
 
 Just be signed into the Cursor app. OpenUsage reads Cursor's local state database (and its keychain entries) for the session tokens; refreshed tokens are persisted back. Nothing extra to install or configure.
 
-If there's no Cursor app login but you've signed into Cursor inside YCoding, OpenUsage uses that login instead. It's read-only — YCoding keeps the login fresh, and OpenUsage simply re-reads it on each refresh.
+Cursor connections configured in YCoding appear as separate [YCoding profile cards](../ycoding.md).
+OpenUsage asks YCoding for usage for each connection; it does not read YCoding's tokens or use one
+profile as a fallback for the native Cursor card. The native card continues to use the Cursor app login.
+YCoding's Cursor spend rows do not contribute to **Total Spend**, because the native account-wide
+history can already include that activity.
 
 ## Spend history
 

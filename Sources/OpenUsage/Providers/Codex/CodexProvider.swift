@@ -21,6 +21,7 @@ final class CodexProvider: ProviderRuntime {
     let piUsageScanner: PiUsageScanner
     let openCodeUsageScanner: OpenCodeCodexUsageScanner
     let yCodingUsageScanner: YCodingUsageScanner
+    let includesYCodingUsage: Bool
     let now: @Sendable () -> Date
     let pricing: @Sendable () async -> ModelPricing
     let fallbackModel: @MainActor () -> String?
@@ -34,6 +35,7 @@ final class CodexProvider: ProviderRuntime {
         piUsageScanner: PiUsageScanner = .shared,
         openCodeUsageScanner: OpenCodeCodexUsageScanner = OpenCodeCodexUsageScanner(),
         yCodingUsageScanner: YCodingUsageScanner = .shared,
+        includesYCodingUsage: Bool = true,
         historyScope: CodexHistoryScope = .allHomes,
         now: @escaping @Sendable () -> Date = Date.init,
         pricing: @escaping @Sendable () async -> ModelPricing = { await ModelPricingStore.shared.current() },
@@ -48,6 +50,7 @@ final class CodexProvider: ProviderRuntime {
         self.piUsageScanner = piUsageScanner
         self.openCodeUsageScanner = openCodeUsageScanner
         self.yCodingUsageScanner = yCodingUsageScanner
+        self.includesYCodingUsage = includesYCodingUsage
         self.now = now
         self.pricing = pricing
         self.fallbackModel = fallbackModel
@@ -177,13 +180,13 @@ final class CodexProvider: ProviderRuntime {
         let piCardID = ProviderAccountID.family(of: provider.id)
         let history = await localHistory.value(wait: localHistoryWait) {
             [pricing, fallbackModel, historyScope, authStore, logUsageScanner, piUsageScanner,
-             openCodeUsageScanner, yCodingUsageScanner, now] in
+             openCodeUsageScanner, yCodingUsageScanner, includesYCodingUsage, now] in
             let claims = await Self.historyClaims(scope: historyScope, authStore: authStore,
                                                   logUsageScanner: logUsageScanner)
             return await Self.scanLocalHistory(
                 claims: claims, claimsPiUsage: historyScope.claimsPiUsage, piCardID: piCardID, pricing: pricing, fallbackModel: fallbackModel, logUsageScanner: logUsageScanner,
                 piUsageScanner: piUsageScanner, openCodeUsageScanner: openCodeUsageScanner,
-                yCodingUsageScanner: yCodingUsageScanner, now: now
+                yCodingUsageScanner: yCodingUsageScanner, includesYCodingUsage: includesYCodingUsage, now: now
             )
         }
         if let history, let usage = history.usageHistory {
@@ -237,6 +240,7 @@ final class CodexProvider: ProviderRuntime {
         piUsageScanner: PiUsageScanner,
         openCodeUsageScanner: OpenCodeCodexUsageScanner,
         yCodingUsageScanner: YCodingUsageScanner,
+        includesYCodingUsage: Bool,
         now: @Sendable () -> Date
     ) async -> CodexLocalHistory {
         let pricing = await pricing()
@@ -251,9 +255,9 @@ final class CodexProvider: ProviderRuntime {
             estimateCost: { CodexUsagePricing.estimatedCost(pricing: pricing, model: $0, tokens: $1, at: $2) }
         ) : nil
         async let openCode = claims.ownsDefaultLogin ? openCodeUsageScanner.scan(now: now(), pricing: pricing) : nil
-        // YCoding rows name a provider family, not an account, so they follow the same single
-        // claimant as pi usage instead of counting on every account card.
-        async let yCoding = claimsPiUsage ? yCodingUsageScanner.scan(
+        // The legacy YCoding fold-in follows the single Pi claimant. Direct YCoding profile cards
+        // disable it so their history never also appears on a native Codex card.
+        async let yCoding = includesYCodingUsage && claimsPiUsage ? yCodingUsageScanner.scan(
             cardID: piCardID, now: now(), pricing: pricing
         ) : nil
         let (nativeScan, piScan, openCodeScan, yCodingScan) = await (native, pi, openCode, yCoding)

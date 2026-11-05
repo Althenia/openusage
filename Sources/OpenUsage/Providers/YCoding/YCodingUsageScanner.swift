@@ -239,9 +239,8 @@ struct YCodingUsageScanner: Sendable {
         return accumulator.build()
     }
 
-    /// SQLite's `date()` always renders the Gregorian calendar, while the app's day keys come from
-    /// `Calendar.current`; re-render through the shared day key so the spend tiles' Today/Yesterday
-    /// lookups match under any system calendar.
+    /// SQLite's `date()` and the shared usage day key both use the Gregorian calendar. Interpret the
+    /// SQL day in the local time zone, preserving its date regardless of the user's display calendar.
     static func dayKey(fromSQLDay day: String) -> String {
         let parts = day.split(separator: "-").compactMap { Int($0) }
         guard parts.count == 3 else { return day }

@@ -89,4 +89,28 @@ final class WidgetUsagePeriodTests: XCTestCase {
         XCTAssertEqual(row.unboundedDetail, "$0.00 · 0 tokens")
         XCTAssertEqual(row.unboundedValueTooltip, "No usage in this period\n\(WidgetData.cursorUsageHistoryNote)")
     }
+
+    func testEstimateNoticePreservesTheUsageValueSourceDisclaimer() {
+        var row = WidgetData(title: "Today", icon: .providerMark("muse"), kind: .dollars, used: 0, limit: nil,
+                             values: [.init(number: 1, kind: .dollars, estimated: true)])
+        row.infoNote = WidgetData.localEstimateNote
+        row.valueTooltipNote = "Usage value, not a billed charge."
+        XCTAssertEqual(row.unboundedValueTooltip, "$1.00\n\(WidgetData.localEstimateNote)\nUsage value, not a billed charge.")
+        row.valueTooltipNote = row.infoNote
+        XCTAssertEqual(row.unboundedValueTooltip, "$1.00\n\(WidgetData.localEstimateNote)")
+    }
+
+    func testLongDollarSemanticsStayVisibleBelowCompactUsageValues() {
+        var row = WidgetData(title: "Last 30 Days", icon: .providerMark("muse"), kind: .dollars, used: 0, limit: nil,
+            values: [.init(number: 4, kind: .dollars, label: "partial estimated usage value", estimated: true),
+                     .init(number: 1200, kind: .count, label: "tokens")])
+        row.dollarLabelAsSubtitle = true
+        XCTAssertEqual(row.unboundedDetail, "$4.00 · 1.2K tokens")
+        XCTAssertEqual(row.unboundedSubtitle, "partial estimated usage value")
+        XCTAssertEqual(row.menuBarValue, "$4 partial estimated usage value")
+        XCTAssertTrue(row.unboundedValueTooltip?.contains("partial estimated usage value") == true)
+        row.dollarLabelAsSubtitle = false
+        XCTAssertNil(row.unboundedSubtitle)
+        XCTAssertTrue(row.unboundedDetail.contains("partial estimated usage value"))
+    }
 }

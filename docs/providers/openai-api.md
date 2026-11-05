@@ -3,6 +3,10 @@
 Tracks the current UTC calendar month's organization API activity and reported USD costs. This is
 separate from the Codex provider and from ChatGPT or Codex subscription quotas.
 
+OpenAI connections configured in YCoding appear separately through the [YCoding integration](../ycoding.md).
+That path accepts existing account and ordinary API-key connections and shows the usage YCoding can
+report for each profile. It does not pass those keys to the organization endpoints described here.
+
 ## Metrics
 
 | Metric | Meaning |

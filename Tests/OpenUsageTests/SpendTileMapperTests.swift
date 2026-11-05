@@ -257,14 +257,17 @@ final class SpendTileMapperTests: XCTestCase {
         return lines
     }
 
-    /// A fixed instant at midday in the current calendar, so `dayKey(from:)` and the hyphenated input
-    /// dates line up regardless of the test machine's clock.
+    /// Literal usage dates are Gregorian; retain the machine's time zone for local-day assertions.
     private func day(_ year: Int, _ month: Int, _ day: Int) -> Date {
-        Calendar.current.date(from: DateComponents(year: year, month: month, day: day, hour: 12))!
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        return calendar.date(from: DateComponents(year: year, month: month, day: day, hour: 12))!
     }
 
     private func dayKey(_ date: Date) -> String {
-        let components = Calendar.current.dateComponents([.year, .month, .day], from: date)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let components = calendar.dateComponents([.year, .month, .day], from: date)
         return String(format: "%04d-%02d-%02d", components.year ?? 0, components.month ?? 0, components.day ?? 0)
     }
 

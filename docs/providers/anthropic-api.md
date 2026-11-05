@@ -3,6 +3,10 @@
 Anthropic API tracks organization reporting from the Claude Console. It is separate from the Claude
 provider, which tracks a Claude subscription and local Claude Code activity.
 
+Anthropic connections configured in YCoding appear separately through the [YCoding integration](../ycoding.md).
+Existing account and ordinary API-key connections keep their own profiles. Their recorded YCoding
+usage does not require or imply access to the organization reports described on this page.
+
 ## Metrics
 
 Both rows cover the current UTC calendar month through the last completed UTC hour:

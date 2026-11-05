@@ -36,6 +36,9 @@ normalized format. Quotas, plans, balances, and provider errors remain this Mac'
 those snapshots. Rows retained in an older peer file are ignored once they fall outside the same
 calendar window used by the local history scanners.
 
+Daily history uses Gregorian dates in each Mac's local time zone. Choosing a different display
+calendar in macOS, such as Buddhist or Hebrew, does not change the stored dates or split a day's usage.
+
 This Mac updates its file after a five-minute refresh batch, a manual refresh, or a provider enablement
 change. iCloud delivery is eventually consistent, so another Mac can take longer than five minutes to
 receive it, especially while offline. Downloaded changes reload immediately when macOS reports them.

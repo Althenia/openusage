@@ -180,7 +180,8 @@ final class YCodingCodexLoginTests: XCTestCase {
     private func assemble(
         files: FakeFiles,
         ycodingValue: String?,
-        directories: [String: [String]] = [:]
+        directories: [String: [String]] = [:],
+        excludingYCodingFamilies: Set<String> = []
     ) async throws -> ProviderAccountAssembly {
         let xdg = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let ycodingDir = xdg.appendingPathComponent("ycoding")
@@ -202,8 +203,34 @@ final class YCodingCodexLoginTests: XCTestCase {
             observer: observer,
             accountsStore: ProviderAccountsStore(defaults: makeScratchDefaults()),
             families: ["codex"],
-            listCodexHomeDirectories: { directories[$0] ?? [] }
+            listCodexHomeDirectories: { directories[$0] ?? [] },
+            excludingYCodingFamilies: excludingYCodingFamilies
         )
+    }
+
+    func testDirectYCodingProfilesDoNotCreateNativeAccountCards() async throws {
+        let files = FakeFiles([
+            "/Users/dev/.codex/auth.json": Fixtures.codexAuth(accountID: "ACCT-NATIVE", email: "native@test")
+        ])
+        let token = Fixtures.token(accountID: "ACCT-YC", email: "yc@test")
+        let assembly = try await assemble(
+            files: files, ycodingValue: oauthValue(token: token, accountID: "ACCT-YC"),
+            excludingYCodingFamilies: ["codex"]
+        )
+
+        XCTAssertTrue(assembly.codexCards.isEmpty, "A separate YCoding profile must not become a native Codex account")
+        XCTAssertTrue(assembly.codex.plainYCodingCredentialSources.isEmpty)
+        XCTAssertNotNil(assembly.identityKeysByCard["codex"], "The native login must still be observed")
+    }
+
+    func testExcludingAnotherFamilyKeepsLegacyCodexDiscovery() async throws {
+        let token = Fixtures.token(accountID: "ACCT-YC", email: "yc@test")
+        let assembly = try await assemble(
+            files: FakeFiles(), ycodingValue: oauthValue(token: token, accountID: "ACCT-YC"),
+            excludingYCodingFamilies: ["claude", "cursor"]
+        )
+
+        XCTAssertEqual(assembly.codex.plainYCodingCredentialSources.count, 1)
     }
 
     func testYCodingOnlyLoginYieldsAWorkingPlainCard() async throws {

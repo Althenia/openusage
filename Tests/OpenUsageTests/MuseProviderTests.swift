@@ -167,17 +167,24 @@ final class MuseProviderTests: XCTestCase {
         XCTAssertNotNil(try defaultStore.loadAPIBaseURL())
     }
 
-    func testBackgroundRefreshReadsKeychainWithoutAllowingAPopup() async {
+    func testStartupPollingAndRenderingNeverReadCredentialsOrSendRequests() async {
         let keychain = MuseKeychain()
+        let recorder = MuseRequestRecorder()
         let provider = MuseProvider(
-            authStore: museAuthStore(keychain: keychain),
-            usageClient: MuseUsageClient(http: MuseHTTPClient(statusCode: 200, body: museData(museSSE), recorder: MuseRequestRecorder()))
+            authStore: MuseAuthStore(files: ForbiddenMuseFiles(), keychain: keychain, environment: FakeEnvironment()),
+            usageClient: MuseUsageClient(http: MuseHTTPClient(statusCode: 200, body: museData(museSSE), recorder: recorder))
         )
-
-        let snapshot = await provider.refresh()
-
-        XCTAssertEqual(snapshot.lines.map(\.label), ["Session", "Weekly"])
-        XCTAssertEqual(keychain.interactionRequests, [false])
+        // A persisted result is unverified after relaunch and must not be adopted by the runtime.
+        provider.adoptLaunchSnapshot(ProviderSnapshot(providerID: "muse", displayName: "Muse", lines: []))
+        _ = provider.widgetDescriptors
+        for _ in 0..<2 {
+            let snapshot = await provider.refresh()
+            XCTAssertEqual(snapshot.errorCategory, .notAvailable)
+            XCTAssertTrue(errorMessage(snapshot)?.contains("Refresh Muse manually") == true)
+        }
+        XCTAssertEqual(keychain.reads, 0)
+        XCTAssertEqual(keychain.existenceProbes, 0)
+        XCTAssertTrue(recorder.requests.isEmpty)
     }
 
     func testManualRefreshMayAskForKeychainAccess() async {
@@ -187,9 +194,7 @@ final class MuseProviderTests: XCTestCase {
             usageClient: MuseUsageClient(http: MuseHTTPClient(statusCode: 200, body: museData(museSSE), recorder: MuseRequestRecorder()))
         )
 
-        let snapshot = await ProviderRefreshContext.$isManual.withValue(true) {
-            await provider.refresh()
-        }
+        let snapshot = await refreshManually(provider)
 
         XCTAssertEqual(snapshot.lines.map(\.label), ["Session", "Weekly"])
         XCTAssertEqual(keychain.interactionRequests, [true])
@@ -203,7 +208,7 @@ final class MuseProviderTests: XCTestCase {
                 usageClient: MuseUsageClient(http: MuseHTTPClient(statusCode: 200, body: museData(museSSE), recorder: recorder))
             )
 
-            let snapshot = await provider.refresh()
+            let snapshot = await refreshManually(provider)
 
             XCTAssertEqual(snapshot.errorCategory, .credentialAccess, "status \(status)")
             XCTAssertEqual(
@@ -221,7 +226,7 @@ final class MuseProviderTests: XCTestCase {
             usageClient: MuseUsageClient(http: MuseHTTPClient(statusCode: 200, body: museData(museSSE), recorder: MuseRequestRecorder()))
         )
 
-        let snapshot = await provider.refresh()
+        let snapshot = await refreshManually(provider)
 
         XCTAssertEqual(snapshot.errorCategory, .credentialAccess)
         XCTAssertEqual(
@@ -258,12 +263,31 @@ final class MuseProviderTests: XCTestCase {
             usageClient: MuseUsageClient(http: MuseHTTPClient(statusCode: 200, body: museData(museSSE), recorder: recorder))
         )
 
-        _ = await provider.refresh()
-        let snapshot = await provider.refresh()
+        _ = await refreshManually(provider)
+        let snapshot = await refreshManually(provider)
 
         XCTAssertEqual(snapshot.lines.map(\.label), ["Session", "Weekly"])
         XCTAssertEqual(keychain.reads, 1)
         XCTAssertEqual(recorder.requests.count, 2)
+    }
+
+    func testAutomaticRefreshKeepsLastManualTimestampWithoutAnotherProbe() async {
+        let recorder = MuseRequestRecorder()
+        let keychain = MuseKeychain()
+        let clock = TestClock(Date(timeIntervalSince1970: 1_791_800_000))
+        let provider = MuseProvider(
+            authStore: museAuthStore(keychain: keychain),
+            usageClient: MuseUsageClient(http: MuseHTTPClient(statusCode: 200, body: museData(museSSE), recorder: recorder)),
+            now: { clock.now }
+        )
+        let manual = await refreshManually(provider)
+        clock.set(clock.now.addingTimeInterval(600))
+        let automatic = await provider.refresh()
+        XCTAssertEqual(automatic.lines, manual.lines)
+        XCTAssertEqual(automatic.refreshedAt, manual.refreshedAt)
+        XCTAssertTrue(automatic.warning?.contains("last manual result") == true)
+        XCTAssertEqual(recorder.requests.count, 1)
+        XCTAssertEqual(keychain.interactionRequests, [true])
     }
 
     func testRejectedReusedKeyIsReadFromKeychainAgainAndRetriedOnce() async {
@@ -274,11 +298,11 @@ final class MuseProviderTests: XCTestCase {
             usageClient: MuseUsageClient(http: MuseHTTPClient(statusCodes: [200, 401, 200], body: museData(museSSE), recorder: recorder))
         )
 
-        _ = await provider.refresh()
-        let snapshot = await provider.refresh()
+        _ = await refreshManually(provider)
+        let snapshot = await refreshManually(provider)
 
         XCTAssertEqual(snapshot.lines.map(\.label), ["Session", "Weekly"])
-        XCTAssertEqual(keychain.interactionRequests, [false, false])
+        XCTAssertEqual(keychain.interactionRequests, [true, true])
         XCTAssertEqual(recorder.requests.count, 3)
     }
 
@@ -290,11 +314,14 @@ final class MuseProviderTests: XCTestCase {
             usageClient: MuseUsageClient(http: MuseHTTPClient(statusCode: 200, body: museData(museSSE), recorder: MuseRequestRecorder()))
         )
 
-        _ = await provider.refresh()
+        _ = await refreshManually(provider)
         files.files = [:]
-        let loggedOut = await provider.refresh()
+        let loggedOut = await refreshManually(provider)
+        let automatic = await provider.refresh()
+        XCTAssertEqual(automatic.errorCategory, .notAvailable)
+        XCTAssertFalse(automatic.lines.contains { $0.label == "Session" })
         files.files = ["~/.config/muse/auth.json": museAuthFile()]
-        _ = await provider.refresh()
+        _ = await refreshManually(provider)
 
         XCTAssertEqual(loggedOut.errorCategory, .notLoggedIn)
         XCTAssertEqual(keychain.reads, 2)
@@ -307,7 +334,7 @@ final class MuseProviderTests: XCTestCase {
             authStore: museAuthStore(files: FakeFiles(), keychain: emptyKeychain),
             usageClient: MuseUsageClient(http: MuseHTTPClient(statusCode: 200, body: museData(museSSE), recorder: noAuthRecorder))
         )
-        let missingFileSnapshot = await missingFile.refresh()
+        let missingFileSnapshot = await refreshManually(missingFile)
         XCTAssertEqual(missingFileSnapshot.errorCategory, .notLoggedIn)
         XCTAssertEqual(emptyKeychain.reads, 0)
         XCTAssertTrue(noAuthRecorder.requests.isEmpty)
@@ -316,7 +343,7 @@ final class MuseProviderTests: XCTestCase {
             authStore: museAuthStore(keychain: MuseKeychain(nil)),
             usageClient: MuseUsageClient(http: MuseHTTPClient(statusCode: 200, body: museData(museSSE), recorder: MuseRequestRecorder()))
         )
-        let missingKeychainSnapshot = await missingKeychain.refresh()
+        let missingKeychainSnapshot = await refreshManually(missingKeychain)
         XCTAssertEqual(missingKeychainSnapshot.errorCategory, .notLoggedIn)
     }
 
@@ -331,7 +358,7 @@ final class MuseProviderTests: XCTestCase {
             usageClient: MuseUsageClient(http: MuseHTTPClient(statusCode: 200, body: museData(museSSE), recorder: recorder))
         )
 
-        let snapshot = await provider.refresh()
+        let snapshot = await refreshManually(provider)
 
         XCTAssertEqual(snapshot.errorCategory, .notAvailable)
         XCTAssertEqual(errorMessage(snapshot), "Your Muse subscription is inactive.")
@@ -348,8 +375,8 @@ final class MuseProviderTests: XCTestCase {
                 usageClient: MuseUsageClient(http: MuseHTTPClient(statusCode: statusCode, body: Data(), recorder: recorder))
             )
 
-            let snapshot = await provider.refresh()
-            let retried = await provider.refresh()
+            let snapshot = await refreshManually(provider)
+            let retried = await refreshManually(provider)
 
             XCTAssertEqual(snapshot.errorCategory, .notLoggedIn, "HTTP \(statusCode)")
             XCTAssertEqual(errorMessage(snapshot), "Run muse login and try again.", "HTTP \(statusCode)")
@@ -362,7 +389,7 @@ final class MuseProviderTests: XCTestCase {
     func testMissingUsageEventFailsLoudly() async {
         let provider = makeProvider(statusCode: 200, body: museData("event: response.completed\ndata: {}\n\n"))
 
-        let snapshot = await provider.refresh()
+        let snapshot = await refreshManually(provider)
 
         XCTAssertEqual(snapshot.errorCategory, .notAvailable)
         XCTAssertEqual(errorMessage(snapshot), "Muse subscription usage is unavailable.")
@@ -376,7 +403,7 @@ final class MuseProviderTests: XCTestCase {
             now: { Date(timeIntervalSince1970: 1_791_800_000) }
         )
 
-        let snapshot = await provider.refresh()
+        let snapshot = await refreshManually(provider)
         let request = try XCTUnwrap(recorder.requests.first)
         let body = try XCTUnwrap(request.body)
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
@@ -408,7 +435,7 @@ final class MuseProviderTests: XCTestCase {
         let hasCredentials = await provider.hasLocalCredentials()
         XCTAssertTrue(hasCredentials)
         XCTAssertTrue(recorder.requests.isEmpty)
-        let snapshot = await provider.refresh()
+        let snapshot = await refreshManually(provider)
         XCTAssertEqual(snapshot.lines.map(\.label), ["Session", "Weekly"])
         XCTAssertEqual(recorder.requests.count, 1)
         XCTAssertEqual(keychain.reads, 1)
@@ -435,8 +462,19 @@ final class MuseProviderTests: XCTestCase {
         )
     }
 
+    private func refreshManually(_ provider: MuseProvider) async -> ProviderSnapshot {
+        await ProviderRefreshContext.$isManual.withValue(true) { await provider.refresh() }
+    }
+
     private func errorMessage(_ snapshot: ProviderSnapshot) -> String? {
         guard case .some(.badge(_, let text, _, _)) = snapshot.lines.first else { return nil }
         return text
     }
+}
+
+private struct ForbiddenMuseFiles: TextFileAccessing {
+    func exists(_ path: String) -> Bool { XCTFail("Automatic refresh read Muse auth files"); return false }
+    func readText(_ path: String) throws -> String { XCTFail("Automatic refresh read Muse auth files"); return "" }
+    func writeText(_ path: String, _ text: String) throws { XCTFail("Unexpected auth write") }
+    func remove(_ path: String) throws { XCTFail("Unexpected auth removal") }
 }

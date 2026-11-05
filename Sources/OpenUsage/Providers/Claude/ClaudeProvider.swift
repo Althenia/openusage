@@ -20,6 +20,7 @@ final class ClaudeProvider: ProviderRuntime {
     let usageClient: ClaudeUsageClient
     let logUsageScanner: ClaudeLogUsageScanner
     let yCodingUsageScanner: YCodingUsageScanner
+    let includesYCodingUsage: Bool
     let allowsUnattributedPiUsage: Bool
     let now: @Sendable () -> Date
     let pricing: @Sendable () async -> ModelPricing
@@ -60,6 +61,7 @@ final class ClaudeProvider: ProviderRuntime {
         usageClient: ClaudeUsageClient = ClaudeUsageClient(),
         logUsageScanner: ClaudeLogUsageScanner = ClaudeLogUsageScanner(),
         yCodingUsageScanner: YCodingUsageScanner = .shared,
+        includesYCodingUsage: Bool = true,
         allowsUnattributedPiUsage: Bool = true,
         now: @escaping @Sendable () -> Date = Date.init,
         pricing: @escaping @Sendable () async -> ModelPricing = { await ModelPricingStore.shared.current() }
@@ -69,6 +71,7 @@ final class ClaudeProvider: ProviderRuntime {
         self.usageClient = usageClient
         self.logUsageScanner = logUsageScanner
         self.yCodingUsageScanner = yCodingUsageScanner
+        self.includesYCodingUsage = includesYCodingUsage
         self.allowsUnattributedPiUsage = allowsUnattributedPiUsage
         self.now = now
         self.pricing = pricing
@@ -323,10 +326,11 @@ final class ClaudeProvider: ProviderRuntime {
         let yCodingAttribution: YCodingAttribution = allowsUnattributedPiUsage
             ? .all
             : .claudeAccount(identityKey: authStore.expectedIdentityKey)
-        let yCodingScan = await yCodingUsageScanner.scan(
+        // Direct YCoding profile cards own this history when present.
+        let yCodingScan = includesYCodingUsage ? await yCodingUsageScanner.scan(
             cardID: ProviderAccountID.family(of: provider.id), now: now(), pricing: pricing,
             attribution: yCodingAttribution
-        )
+        ) : nil
         var usageHistory: ProviderUsageHistory?
         // Cancellation can land between the native and pi scans. Treat the pair as one unit so a
         // partial result cannot replace the last-good combined history in WidgetDataStore.

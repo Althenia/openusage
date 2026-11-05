@@ -5,17 +5,62 @@ import XCTest
 /// (the class of drift behind the ccusage false-zero fix): one `dayKey` spelling, newest-first day
 /// order, per-model accumulation, always-priced days, and unknown models isolated from the series.
 final class DailyUsageAccumulatorTests: XCTestCase {
-    func testDayKeyUsesInjectedCalendarAndZeroPads() {
+    func testDayKeyUsesInjectedTimeZoneAndZeroPads() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "UTC")!
         // 2024-03-07 23:30 UTC — pads month and day to two digits.
         let date = calendar.date(from: DateComponents(year: 2024, month: 3, day: 7, hour: 23, minute: 30))!
         XCTAssertEqual(DailyUsageAccumulator.dayKey(from: date, calendar: calendar), "2024-03-07")
 
-        // The key is local-calendar: one instant, two time zones, two different days.
+        // One instant belongs to different Gregorian days in different time zones.
         var tokyo = Calendar(identifier: .gregorian)
         tokyo.timeZone = TimeZone(identifier: "Asia/Tokyo")!
         XCTAssertEqual(DailyUsageAccumulator.dayKey(from: date, calendar: tokyo), "2024-03-08")
+    }
+
+    func testNonGregorianCalendarsKeepGregorianStorageKeysAndLocalMidnight() throws {
+        let date = try XCTUnwrap(OpenUsageISO8601.date(from: "2026-12-31T17:30:00Z"))
+        for identifier: Calendar.Identifier in [.buddhist, .hebrew, .islamicUmmAlQura, .japanese] {
+            var calendar = Calendar(identifier: identifier)
+            calendar.locale = Locale(identifier: "th_TH")
+            calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "Asia/Bangkok"))
+            XCTAssertEqual(DailyUsageAccumulator.dayKey(from: date, calendar: calendar), "2027-01-01")
+            calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+            XCTAssertEqual(DailyUsageAccumulator.dayKey(from: date, calendar: calendar), "2026-12-31")
+        }
+    }
+
+    func testCalendarPreferenceDoesNotSplitUsageIntoDifferentStorageDays() throws {
+        let date = try XCTUnwrap(OpenUsageISO8601.date(from: "2026-07-12T12:00:00Z"))
+        var accumulator = DailyUsageAccumulator()
+        for identifier: Calendar.Identifier in [.gregorian, .buddhist] {
+            var calendar = Calendar(identifier: identifier)
+            calendar.locale = Locale(identifier: "th_TH")
+            calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+            accumulator.add(
+                day: DailyUsageAccumulator.dayKey(from: date, calendar: calendar),
+                tokens: 10, cost: 0.5, model: "fixture-model"
+            )
+        }
+        XCTAssertEqual(accumulator.build().series.daily, [
+            DailyUsageEntry(date: "2026-07-12", totalTokens: 20, costUSD: 1)
+        ])
+    }
+
+    func testBuddhistHistoryWindowKeepsDistinctGregorianDaysAcrossDST() throws {
+        var calendar = Calendar(identifier: .buddhist)
+        calendar.locale = Locale(identifier: "th_TH")
+        calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "America/New_York"))
+        let beforeJump = try XCTUnwrap(OpenUsageISO8601.date(from: "2026-03-08T06:30:00Z"))
+        let afterJump = try XCTUnwrap(OpenUsageISO8601.date(from: "2026-03-08T07:30:00Z"))
+        XCTAssertEqual(DailyUsageAccumulator.dayKey(from: beforeJump, calendar: calendar), "2026-03-08")
+        XCTAssertEqual(DailyUsageAccumulator.dayKey(from: afterJump, calendar: calendar), "2026-03-08")
+        let now = try XCTUnwrap(OpenUsageISO8601.date(from: "2026-03-09T16:00:00Z"))
+        let days = UsageHistoryWindow.dayKeys(through: now, calendar: calendar)
+        XCTAssertEqual(days.count, 31)
+        XCTAssertEqual(days.min(), "2026-02-07")
+        XCTAssertEqual(days.max(), "2026-03-09")
+        XCTAssertTrue(days.contains("2026-03-08"))
     }
 
     func testBuildSortsDaysNewestFirstAndSumsPerModel() {

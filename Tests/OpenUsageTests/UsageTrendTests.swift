@@ -182,10 +182,11 @@ final class UsageTrendTests: XCTestCase {
 
     // MARK: - Helpers
 
-    /// A fixed `now` at midday in the current calendar, so `startOfDay` math is stable regardless of the
-    /// machine's clock and the day-key strings line up with the hyphenated input dates.
+    /// Gregorian fixture dates at local midday keep ISO history keys stable across calendar preferences.
     private func date(_ year: Int, _ month: Int, _ day: Int) -> Date {
-        Calendar.current.date(from: DateComponents(year: year, month: month, day: day, hour: 12))!
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        return calendar.date(from: DateComponents(year: year, month: month, day: day, hour: 12))!
     }
 
     /// The expected axis label for a day, in the app's localized month/day style — via the same shared

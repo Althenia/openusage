@@ -61,7 +61,9 @@ struct ProviderSnapshotCache {
         // so a launch after an account swap at the same home can discard the previous account's cached
         // limits/plan instead of painting them under the new account's card. Refetch on upgrade so every
         // retained entry carries a stamp from its first write.
-        storageKey: String = "openusage.providerSnapshots.v9",
+        // v10: direct YCoding profile cards own their history. Native v9 snapshots may still include
+        // folded YCoding totals, so discard them for both launch paint and one-shot CLI freshness.
+        storageKey: String = "openusage.providerSnapshots.v10",
         ttl: TimeInterval = RefreshSetting.interval,
         allowsPersistedFreshness: Bool = false,
         now: @escaping () -> Date = Date.init

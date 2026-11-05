@@ -2,6 +2,10 @@
 
 Tracks pool quotas for Antigravity (Google's AI IDE) using credentials the app or the `agy` CLI already stored on your Mac.
 
+Antigravity connections configured in YCoding appear as separate [YCoding profile cards](../ycoding.md).
+Those cards use the usage YCoding reports for each connection; the native app and `agy` sources below
+continue to belong to the native Antigravity provider.
+
 ## What it tracks
 
 Antigravity has two shared quota pools, and each pool has two windows — a rolling 5-hour window and a weekly window:

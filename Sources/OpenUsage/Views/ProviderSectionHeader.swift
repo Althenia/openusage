@@ -55,30 +55,51 @@ struct ProviderSectionHeader: View {
             ProviderIcon(source: provider.icon, inset: 0.04)
                 .frame(width: density.headerIconSize, height: density.headerIconSize)
                 .partyPulse(partyMode)
-            // Baseline-aligned pair: the plan badge (and stale tag) are smaller type and sit on the
-            // name's text baseline, so the words line up along the bottom rather than floating centered.
-            HStack(alignment: .firstTextBaseline, spacing: 5) {
-                // Give the plan first choice of the available width, while still allowing an oversized
-                // plan to truncate. Account names and the lower-priority stale tag yield space first.
-                Text(provider.displayName)
-                    .font(.system(size: density.headerPointSize, weight: .semibold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .layoutPriority(1)
-                if let plan {
-                    ProviderPlanBadge(plan: plan)
-                        .layoutPriority(2)
+            if provider.id.contains("@ycoding-") {
+                // Source/auth metadata must not crowd the profile identity out of a narrow panel.
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(provider.displayName)
+                        .font(.system(size: density.headerPointSize, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(2)
+                    HStack(alignment: .firstTextBaseline, spacing: 5) {
+                        if let plan { ProviderPlanBadge(plan: plan) }
+                        if let staleness, !refreshing {
+                            Text(staleness.label)
+                                .font(.system(size: density.planBadgePointSize))
+                                .foregroundStyle(.tertiary)
+                                .lineLimit(1)
+                                .hoverTooltip(staleness.tooltip)
+                        }
+                    }
                 }
-                // Tertiary, below the plan in hierarchy: outdated content, not something the user acts on.
-                // Short by design ("Outdated") so it never pushes the plan name onto a second line — the
-                // precise age rides in the hover tooltip. Hidden while a refresh is in flight: the spinner
-                // already says "working on it".
-                if let staleness, !refreshing {
-                    Text(staleness.label)
-                        .font(.system(size: density.planBadgePointSize))
-                        .foregroundStyle(.tertiary)
+                .layoutPriority(1)
+            } else {
+                // Baseline-aligned pair: the plan badge (and stale tag) are smaller type and sit on the
+                // name's text baseline, so the words line up along the bottom rather than floating centered.
+                HStack(alignment: .firstTextBaseline, spacing: 5) {
+                    // Give the plan first choice of the available width, while still allowing an oversized
+                    // plan to truncate. Account names and the lower-priority stale tag yield space first.
+                    Text(provider.displayName)
+                        .font(.system(size: density.headerPointSize, weight: .semibold))
+                        .foregroundStyle(.primary)
                         .lineLimit(1)
-                        .hoverTooltip(staleness.tooltip)
+                        .layoutPriority(1)
+                    if let plan {
+                        ProviderPlanBadge(plan: plan)
+                            .layoutPriority(2)
+                    }
+                    // Tertiary, below the plan in hierarchy: outdated content, not something the user acts on.
+                    // Short by design ("Outdated") so it never pushes the plan name onto a second line — the
+                    // precise age rides in the hover tooltip. Hidden while a refresh is in flight: the spinner
+                    // already says "working on it".
+                    if let staleness, !refreshing {
+                        Text(staleness.label)
+                            .font(.system(size: density.planBadgePointSize))
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
+                            .hoverTooltip(staleness.tooltip)
+                    }
                 }
             }
             if refreshing {

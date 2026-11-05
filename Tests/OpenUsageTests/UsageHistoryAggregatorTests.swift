@@ -389,6 +389,8 @@ final class UsageHistoryAggregatorTests: XCTestCase {
     }
 
     private func localDay(_ year: Int, _ month: Int, _ day: Int) -> Date {
-        Calendar.current.date(from: DateComponents(year: year, month: month, day: day, hour: 12))!
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        return calendar.date(from: DateComponents(year: year, month: month, day: day, hour: 12))!
     }
 }

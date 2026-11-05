@@ -1,6 +1,6 @@
 # Model Pricing
 
-How OpenUsage turns token counts into the estimated dollars on the Claude, Codex, Cursor, and Grok spend tiles. Grok uses the cost recorded in its session logs when available and only estimates older turns without one. Usage folded in from the YCoding agent works the same way: requests with a recorded cost use it directly, and only requests without one are estimated here, at standard rates without long-context tiers because YCoding's history is summed per day and model before pricing. OpenRouter and OpenCode do not use these estimates because their sources already report the cost directly.
+How OpenUsage turns token counts into the estimated dollars on the Claude, Codex, Cursor, and Grok spend tiles. Grok uses the cost recorded in its session logs when available and only estimates older turns without one. Separate [YCoding profile cards](ycoding.md) preserve reported prices and use this engine for wholly unpriced model groups with reliable token categories. Their estimated usage value is separate from billed charges and Total Spend. OpenRouter and OpenCode do not use these estimates because their sources already report the cost directly.
 
 ## Where prices come from
 
@@ -43,6 +43,14 @@ Claude Opus 5.5 uses [Anthropic's published rates](https://platform.claude.com/d
 GPT-6 Sol, GPT-6.1 Sol, and GPT-6 Luna use the rates on [OpenAI's pricing page](https://developers.openai.com/api/docs/pricing), with Fast at 2x. GPT-5.6 Sol uses OpenAI's promotional rates, available at least through November 21, 2026. Codex Ultrafast is 6x for GPT-6 Astra only; other models on Ultrafast use their Fast multiplier.
 
 ## What the estimate includes
+
+YCoding's fallback preserves provider and profile attribution. Normalized uncached input, cache reads,
+text output, and reasoning tokens are counted once. It requires explicit cache telemetry and published
+cache-read rates. Cache writes cannot be priced safely because the report omits their lifetime. Mixed
+priced/unpriced model groups cannot be estimated because their token subtotals are not separated.
+Aggregated groups that could cross a long-context tier remain incomplete; a single request can use
+its applicable tier. Unknown models remain unpriced. These limits keep missing prices visible without
+inventing a charge or counting already priced requests twice.
 
 Costs are computed per usage event from four token buckets — plain input, cache writes, cache reads, and output — at the model's per-million-token rates, including 1-hour cache-write pricing, long-context tiers, and fast-variant multipliers. Most catalog tiers start above 200k prompt tokens; supported GPT-5.4, GPT-5.5, GPT-5.6, and GPT-6 Codex models switch above 272k input tokens. In either case, the higher rate applies to the whole request. A published cache discount is used when available; Codex cached input falls back to the full input rate when the source publishes no discount. Cursor's export combines many requests into each row, so OpenUsage uses the normal rate there rather than guessing that one request crossed the limit. When a Claude or Grok session records its own cost, that amount is used as-is. Nested Claude advisor usage has no carried cost, so it is priced separately from its tokens using the advisor model. Estimates represent API-rate value rather than a subscription bill.
 

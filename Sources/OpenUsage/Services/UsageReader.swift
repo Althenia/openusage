@@ -54,14 +54,21 @@ public struct UsageReader {
                 _ = LoginShellEnvironment.shared.ensureCaptured()
             }.value
         }
+        let ycoding = providersOverride == nil
+            ? await YCodingProviderAssembly.make()
+            : YCodingProviderAssembly(providers: [], identityKeysByCard: [:])
         let accountAssembly = providersOverride == nil
-            ? await ProviderAccountAssembly.make(defaults: defaults, waitsForLoginShell: false)
+            ? await ProviderAccountAssembly.make(defaults: defaults, waitsForLoginShell: false,
+                                                 excludingYCodingFamilies: YCodingConnectionBridge.replacedLegacyFamilies)
             : ProviderAccountAssembly(identityKeysByCard: [:])
+        let identityKeys = accountAssembly.identityKeysByCard.merging(ycoding.identityKeysByCard) { _, new in new }
         let providers = providersOverride ?? ProviderCatalog.make(
             defaults: defaults,
             claudeCards: accountAssembly.claudeCards,
             codex: accountAssembly.codex,
-            claudeIdentityKeys: accountAssembly.identityKeysByCard
+            claudeIdentityKeys: accountAssembly.identityKeysByCard,
+            excludingYCodingFamilies: YCodingConnectionBridge.replacedLegacyFamilies,
+            ycodingProviders: ycoding.providers
         )
         let registry = WidgetRegistry.from(providers)
         let knownIDs = Set(registry.providers.map(\.id))
@@ -87,7 +94,7 @@ public struct UsageReader {
         // account (swap since it was written) is never served, and its provider counts as needing a
         // refresh even while the stale entry is TTL-fresh.
         let staleAccountStampIDs = Set(allProviderIDs.filter {
-            cache.hasStaleAccountStamp(providerID: $0, currentIdentityKey: accountAssembly.identityKeysByCard[$0])
+            cache.hasStaleAccountStamp(providerID: $0, currentIdentityKey: identityKeys[$0])
         })
         let cachedSnapshots = cache.loadSnapshots(providerIDs: allProviderIDs)
             .filter { providerID, _ in !staleAccountStampIDs.contains(providerID) }
@@ -114,7 +121,7 @@ public struct UsageReader {
                 isProviderEnabled: includesProvider,
                 // The CLI shares the app's snapshot cache, so its writes must carry the same account
                 // stamp — an unstamped claude/codex entry would be discarded at the app's next launch.
-                providerIdentityKeys: accountAssembly.identityKeysByCard
+                providerIdentityKeys: identityKeys
             )
             if let matchedIDs {
                 for providerID in orderedIDs.filter(matchedIDs.contains) {

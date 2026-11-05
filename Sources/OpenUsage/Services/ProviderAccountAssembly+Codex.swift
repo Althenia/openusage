@@ -36,7 +36,8 @@ extension ProviderAccountAssembly {
         observer: DefaultAccountObserver,
         accountsStore: ProviderAccountsStore,
         listDirectories: @escaping @Sendable (String) -> [String] = CodexHomeScanner.listSubdirectories,
-        profiles: [ProviderProfile] = []
+        profiles: [ProviderProfile] = [],
+        includesYCoding: Bool = true
     ) async -> CodexAccountDiscovery {
         let homeDirectory = observer.homeDirectory()
         let swaps = CodexSwapAccount.discover(
@@ -56,9 +57,10 @@ extension ProviderAccountAssembly {
         let piScan = PiCodexLoginScanner(
             environment: observer.environment, files: observer.files, homeDirectory: observer.homeDirectory
         ).scan()
-        let ycodingScan = YCodingCodexLoginScanner(
+        // Direct YCoding profiles are separate cards and must not also become native accounts.
+        let ycodingScan = includesYCoding ? YCodingCodexLoginScanner(
             environment: observer.environment, files: observer.files, homeDirectory: observer.homeDirectory
-        ).scan()
+        ).scan() : .empty
         // Keychain can hold a different default login with no auth.json or saved Swap slot.
         let auth = CodexAuthStore(environment: observer.environment, files: observer.files,
                                   keychain: observer.keychain)

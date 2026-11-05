@@ -32,7 +32,11 @@ struct ProviderAccountAssembly {
     /// `waitsForLoginShell`: true for the menu-bar app (a Finder/Dock launch inherits no shell
     /// exports, so the pass leans on the login-shell layers), false for the one-shot CLI (a terminal
     /// launch's process environment already carries the user's exports).
-    static func make(defaults preferences: AppPreferences = .standard, waitsForLoginShell: Bool) async -> ProviderAccountAssembly {
+    static func make(
+        defaults preferences: AppPreferences = .standard,
+        waitsForLoginShell: Bool,
+        excludingYCodingFamilies: Set<String> = []
+    ) async -> ProviderAccountAssembly {
         // The identity read needs the login shell's exports (CLAUDE_CONFIG_DIR/CODEX_HOME name the
         // default homes), and it reads them through the very same reader the provider auth stores
         // use — `ProcessEnvironmentReader`, which pins identity-relevant keys to the persisted
@@ -59,7 +63,8 @@ struct ProviderAccountAssembly {
             observer: DefaultAccountObserver(),
             accountsStore: ProviderAccountsStore(defaults: preferences),
             families: families,
-            profiles: ProviderProfilesStore.load(from: preferences)
+            profiles: ProviderProfilesStore.load(from: preferences),
+            excludingYCodingFamilies: excludingYCodingFamilies
         )
     }
 
@@ -93,11 +98,13 @@ struct ProviderAccountAssembly {
                 return url.lastPathComponent
             }
         },
-        profiles: [ProviderProfile] = []
+        profiles: [ProviderProfile] = [],
+        excludingYCodingFamilies: Set<String> = []
     ) async -> ProviderAccountAssembly {
         let codex = families.contains("codex")
             ? await makeCodexCards(observer: observer, accountsStore: accountsStore,
-                                   listDirectories: listCodexHomeDirectories, profiles: profiles)
+                                   listDirectories: listCodexHomeDirectories, profiles: profiles,
+                                   includesYCoding: !excludingYCodingFamilies.contains("codex"))
             : CodexAccountDiscovery()
         let codexCards = codex.cards
         var identityKeys = Dictionary(uniqueKeysWithValues: codexCards.map { ($0.id, $0.identity.key) })

@@ -53,6 +53,8 @@ struct WidgetData: Hashable {
     /// Fixed trailing word for an unbounded row, e.g. "left" for an extra balance or "spent" for a
     /// spend estimate. When set it replaces the global left/used mode word.
     var unboundedValueWord: String?
+    /// Long dollar semantics belong below compact row amounts. The tray retains the full label.
+    var dollarLabelAsSubtitle: Bool = false
     /// Optional source/disclaimer note for locally-estimated tiles. Rendered on the value-side hover,
     /// not beside the left label, so labels stay inert.
     var infoNote: String?
@@ -113,6 +115,14 @@ struct WidgetData: Hashable {
 
     /// `values` projected through `selection` — exactly what this tile shows.
     var selectedValues: [MetricValue] { selection.apply(to: values) }
+
+    private var compactValues: [MetricValue] {
+        selectedValues.map { value in
+            var value = value
+            if dollarLabelAsSubtitle && value.kind == .dollars { value.label = nil }
+            return value
+        }
+    }
 
     var displayedValue: Double {
         guard displayMode == .remaining, let limit else { return used }
@@ -320,7 +330,7 @@ struct WidgetData: Hashable {
     var unboundedDetail: String {
         guard hasData else { return Self.noDataSubtitle }
         if let valueTextOverride { return valueTextOverride }
-        let selected = selectedValues
+        let selected = compactValues
         if !selected.isEmpty {
             // One value: a lone dollar amount takes the widget's trailing word ("$4.08 spent",
             // "$1,503 left"); any other single value carries its own unit label ("1.2M tokens",
@@ -411,6 +421,9 @@ struct WidgetData: Hashable {
     /// Secondary line under an unbounded row's detail (e.g. "on-device estimate"); nil with no real data.
     var unboundedSubtitle: String? {
         guard hasData else { return nil }
+        if dollarLabelAsSubtitle, let label = selectedValues.first(where: { $0.kind == .dollars })?.label {
+            return label
+        }
         return subtitleOverride
     }
 
@@ -444,7 +457,10 @@ struct WidgetData: Hashable {
     }
 
     private var unboundedTooltipNote: String? {
-        infoNote ?? valueTooltipNote
+        if let infoNote, let valueTooltipNote, infoNote != valueTooltipNote {
+            return "\(infoNote)\n\(valueTooltipNote)"
+        }
+        return infoNote ?? valueTooltipNote
     }
 
     /// True for a zero-usage period — has data, but every selected value is zero (a row reading

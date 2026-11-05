@@ -47,17 +47,20 @@ struct CursorAuthStore: Sendable {
     var keychain: KeychainAccessing
     var now: @Sendable () -> Date
     var ycodingCredentials: YCodingCredentialReader
+    let includesYCodingCredentials: Bool
 
     init(
         sqlite: SQLiteAccessing = SQLiteCLIAccessor(),
         keychain: KeychainAccessing = SecurityKeychainAccessor(),
         now: @escaping @Sendable () -> Date = Date.init,
-        ycodingCredentials: YCodingCredentialReader? = nil
+        ycodingCredentials: YCodingCredentialReader? = nil,
+        includesYCodingCredentials: Bool = true
     ) {
         self.sqlite = sqlite
         self.keychain = keychain
         self.now = now
         self.ycodingCredentials = ycodingCredentials ?? YCodingCredentialReader(sqlite: sqlite)
+        self.includesYCodingCredentials = includesYCodingCredentials
     }
 
     func loadAuthState() -> CursorAuthState? {
@@ -100,6 +103,7 @@ struct CursorAuthStore: Sendable {
             )
         }
 
+        guard includesYCodingCredentials else { return nil }
         do {
             if let accessToken = try ycodingCredentials.oauthAccessToken(integration: "cursor") {
                 return CursorAuthState(accessToken: accessToken, refreshToken: nil, source: .ycoding)

@@ -44,7 +44,7 @@ enum DefaultLayout {
         "grok.weekly", "grok.trend",
         "grok.payAsYouGo", "grok.today", "grok.yesterday", "grok.last30",
 
-        "muse.session", "muse.weekly",
+        "muse.session", "muse.weekly", "muse.today", "muse.yesterday", "muse.last30",
 
         "ollama.session", "ollama.weekly", "ollama.monthly", "ollama.purchasedCredits",
 
@@ -119,6 +119,7 @@ enum DefaultLayout {
         "copilot.orgCredits", "copilot.orgSpend", "copilot.chat", "copilot.completions",
         "devin.extra",
         "grok.payAsYouGo", "grok.today", "grok.yesterday", "grok.last30",
+        "muse.today", "muse.yesterday", "muse.last30",
         // Ollama: the plan meters stay above the fold; purchased credits sit below the caret.
         "ollama.purchasedCredits",
         // OpenCode: the three Go caps (Session/Weekly/Monthly) and Usage Trend stay above the fold —

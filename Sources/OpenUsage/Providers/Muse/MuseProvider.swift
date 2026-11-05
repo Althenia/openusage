@@ -8,6 +8,9 @@ final class MuseProvider: ProviderRuntime {
     let usageClient: MuseUsageClient
     let now: @Sendable () -> Date
     private var cachedAPIKey: String?
+    private var lastManualSnapshot: ProviderSnapshot?
+    private static let manualRefreshNotice =
+        "Refresh Muse manually to check subscription usage. This sends a small model request that may consume usage."
 
     init(
         authStore: MuseAuthStore = MuseAuthStore(),
@@ -36,10 +39,23 @@ final class MuseProvider: ProviderRuntime {
     }
 
     func refresh() async -> ProviderSnapshot {
+        // Muse reports quotas inside an inference response. Startup and polling must never spend
+        // usage or access credentials; only an explicit refresh authorizes that model request.
+        guard ProviderRefreshContext.isManual else {
+            guard var snapshot = lastManualSnapshot else {
+                return .error(provider: provider, message: Self.manualRefreshNotice, category: .notAvailable)
+            }
+            snapshot.warning = "Showing the last manual result. " + Self.manualRefreshNotice
+            return snapshot
+        }
         do {
-            let lines = try await loadUsage(allowInteraction: ProviderRefreshContext.isManual)
-            return ProviderSnapshot.make(provider: provider, plan: nil, lines: lines, refreshedAt: now())
+            let lines = try await loadUsage(allowInteraction: true)
+            let snapshot = ProviderSnapshot.make(provider: provider, plan: nil, lines: lines, refreshedAt: now())
+            lastManualSnapshot = snapshot
+            return snapshot
         } catch {
+            // A failed login or account change must not revive another account's retained quota.
+            lastManualSnapshot = nil
             return ProviderSnapshot.error(provider: provider, error: error)
         }
     }

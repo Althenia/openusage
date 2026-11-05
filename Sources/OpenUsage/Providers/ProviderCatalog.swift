@@ -4,17 +4,21 @@ import Foundation
 /// their runtimes here so credentials, refresh behavior, pricing, and normalization can never drift.
 @MainActor
 enum ProviderCatalog {
+    /// Families represented by direct YCoding profile cards leave YCoding credentials and history
+    /// to those cards; their native runtimes keep their own logins and usage sources.
     static func make(
         defaults preferences: AppPreferences = .standard,
         claudeCards: [ClaudeAccountCard] = [],
         codex: CodexAccountDiscovery = CodexAccountDiscovery(),
-        claudeIdentityKeys: [String: String] = [:]
+        claudeIdentityKeys: [String: String] = [:],
+        excludingYCodingFamilies: Set<String> = [],
+        ycodingProviders: [ProviderRuntime] = []
     ) -> [ProviderRuntime] {
         // Default provider order (see AGENTS.md "## Providers"): the three established providers first,
         // then every other provider alphabetically by display name.
         var providers: [ProviderRuntime]
         if claudeCards.isEmpty {
-            providers = [ClaudeProvider()]
+            providers = [ClaudeProvider(includesYCodingUsage: !excludingYCodingFamilies.contains("claude"))]
         } else {
             providers = claudeCards.map { card in
                 let identity = claudeIdentityKeys[card.id] ?? card.identityKey
@@ -42,6 +46,7 @@ enum ProviderCatalog {
                         profileConfigDirectories: card.mergedProfileDirectories
                     ),
                     logUsageScanner: scanner,
+                    includesYCodingUsage: !excludingYCodingFamilies.contains("claude"),
                     allowsUnattributedPiUsage: card.allowsUnattributedPiUsage
                 )
             }
@@ -52,9 +57,10 @@ enum ProviderCatalog {
                     additionalAuthHomes: codex.plainAuthHomes,
                     writableAuthHomes: Set(codex.plainWritableAuthHomes),
                     piCredentialSources: codex.plainPiCredentialSources,
-                    ycodingCredentialSources: codex.plainYCodingCredentialSources
+                    ycodingCredentialSources: excludingYCodingFamilies.contains("codex") ? [] : codex.plainYCodingCredentialSources
                 ),
-                logUsageScanner: CodexLogUsageScanner(additionalHomes: codex.plainAuthHomes)
+                logUsageScanner: CodexLogUsageScanner(additionalHomes: codex.plainAuthHomes),
+                includesYCodingUsage: !excludingYCodingFamilies.contains("codex")
             ))
         } else {
             providers += codex.cards.map { card in
@@ -65,14 +71,17 @@ enum ProviderCatalog {
                         additionalAuthHomes: card.authHomes,
                         writableAuthHomes: Set(card.writableAuthHomes),
                         piCredentialSources: card.piCredentialSources,
-                        ycodingCredentialSources: card.ycodingCredentialSources
+                        ycodingCredentialSources: excludingYCodingFamilies.contains("codex") ? [] : card.ycodingCredentialSources
                     ),
+                    includesYCodingUsage: !excludingYCodingFamilies.contains("codex"),
                     historyScope: .account(card.identity, codex.historyHomes, claimsPiUsage: card.claimsPiUsage)
                 )
             }
         }
         providers += [
-            CursorProvider(),
+            CursorProvider(authStore: CursorAuthStore(
+                includesYCodingCredentials: !excludingYCodingFamilies.contains("cursor")
+            )),
             AnthropicAPIProvider(),
             AntigravityProvider(),
             CopilotProvider(defaults: preferences),
@@ -85,6 +94,20 @@ enum ProviderCatalog {
             OpenRouterProvider(),
             ZAIProvider()
         ]
-        return providers
+        // Keep each connection next to its existing provider family. Profiles remain separate even
+        // when they belong to the same person or workspace.
+        var remaining = ycodingProviders
+        var ordered: [ProviderRuntime] = []
+        for (index, runtime) in providers.enumerated() {
+            ordered.append(runtime)
+            let family = ProviderAccountID.family(of: runtime.provider.id)
+            let nextFamily = providers.indices.contains(index + 1)
+                ? ProviderAccountID.family(of: providers[index + 1].provider.id) : nil
+            if nextFamily != family {
+                ordered += remaining.filter { ProviderAccountID.family(of: $0.provider.id) == family }
+                remaining.removeAll { ProviderAccountID.family(of: $0.provider.id) == family }
+            }
+        }
+        return ordered + remaining
     }
 }

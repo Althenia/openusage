@@ -105,4 +105,35 @@ final class ProviderSnapshotCacheTests: XCTestCase {
         let relaunched = ProviderSnapshotCache(userDefaults: defaults, storageKey: "k", ttl: 9_999, now: { now })
         XCTAssertEqual(relaunched.loadSnapshots(providerIDs: ["alpha"]).count, 1)
     }
+
+    func testYCodingProfileUpgradeDiscardsPreviouslyFoldedSnapshotsForAppAndCLI() {
+        let defaults = makeDefaults()
+        let now = Date(timeIntervalSince1970: 1_794_000_000)
+        let oldCache = ProviderSnapshotCache(
+            userDefaults: defaults, storageKey: "openusage.providerSnapshots.v9", ttl: 9_999, now: { now }
+        )
+        let previouslyFolded = snapshot("codex", used: 42, now: now)
+        oldCache.store(previouslyFolded, producedByIdentityKey: "native-account")
+        XCTAssertNotNil(oldCache.snapshot(providerID: "codex"), "The fixture must be a valid fresh v9 cache")
+
+        for allowsPersistedFreshness in [false, true] {
+            let upgraded = ProviderSnapshotCache(
+                userDefaults: defaults, ttl: 9_999,
+                allowsPersistedFreshness: allowsPersistedFreshness, now: { now }
+            )
+            XCTAssertTrue(upgraded.loadSnapshots(providerIDs: ["codex"]).isEmpty)
+            XCTAssertNil(upgraded.snapshot(providerID: "codex"))
+            XCTAssertNil(upgraded.producedByIdentityKey(providerID: "codex"))
+        }
+
+        let replacement = snapshot("codex", used: 7, now: now)
+        ProviderSnapshotCache(userDefaults: defaults, now: { now })
+            .store(replacement, producedByIdentityKey: "native-account")
+        let relaunched = ProviderSnapshotCache(
+            userDefaults: defaults, allowsPersistedFreshness: true, now: { now }
+        )
+        XCTAssertEqual(relaunched.snapshot(providerID: "codex"), replacement)
+        XCTAssertEqual(relaunched.loadSnapshots(providerIDs: ["codex"])["codex"], replacement)
+        XCTAssertEqual(relaunched.producedByIdentityKey(providerID: "codex"), "native-account")
+    }
 }
