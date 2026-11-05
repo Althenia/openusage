@@ -44,7 +44,7 @@ enum DefaultLayout {
         "grok.weekly", "grok.trend",
         "grok.payAsYouGo", "grok.today", "grok.yesterday", "grok.last30",
 
-        "muse.session", "muse.weekly", "muse.today", "muse.yesterday", "muse.last30",
+        "muse.session", "muse.weekly", "muse.trend", "muse.today", "muse.yesterday", "muse.last30",
 
         "ollama.session", "ollama.weekly", "ollama.monthly", "ollama.purchasedCredits",
 

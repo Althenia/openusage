@@ -1,3 +1,4 @@
+import Darwin
 import XCTest
 @testable import OpenUsage
 
@@ -186,6 +187,90 @@ final class YCodingConnectionClientTests: XCTestCase {
         XCTAssertEqual(connections, [.init(integrationID: "cursor", id: "fixture-cursor", profile: "Fixture Profile", active: false)])
     }
 
+    func testServiceAutoDiscoveryQueriesLocalServerWithBasicAuthAndFallsBackToCLIOnTransportFailure() async throws {
+        let files = FakeFiles([
+            "/fixture/state/ycoding/service.json": #"{"url":"http://127.0.0.1:42188","password":"synthetic-password","pid":\#(getpid())}"#
+        ])
+        let responseBody = Data(#"{"data":[{"id":"openai","connections":[{"type":"credential","id":"cred_a","label":"Work","active":true}]}]}"#.utf8)
+        let stubHTTP = StubHTTPClient([.success(HTTPResponse(statusCode: 200, headers: [:], body: responseBody))])
+        let runner = StubRunner([])
+        let client = YCodingConnectionClient(
+            processRunner: runner,
+            http: stubHTTP,
+            files: files,
+            locationDirectory: "/fixture/home",
+            serviceFilePath: "/fixture/state/ycoding/service.json"
+        )
+        let connections = try await client.connections()
+
+        XCTAssertEqual(connections.map(\.id), ["cred_a"])
+        XCTAssertEqual(stubHTTP.calls.count, 1)
+        let call = stubHTTP.calls[0]
+        XCTAssertEqual(call.url.path, "/api/integration")
+        XCTAssertEqual(
+            URLComponents(url: call.url, resolvingAgainstBaseURL: false)?.queryItems,
+            [URLQueryItem(name: "location[directory]", value: "/fixture/home")]
+        )
+        XCTAssertEqual(call.headers["Authorization"], "Basic " + Data("ycoding:synthetic-password".utf8).base64EncodedString())
+        XCTAssertTrue(runner.calls.isEmpty)
+
+        let transportFailHTTP = StubHTTPClient([.failure(URLError(.cannotConnectToHost))])
+        let fallbackRunner = StubRunner([#"{"data":[{"id":"openai","connections":[{"type":"credential","id":"cred_fallback","label":"Work","active":true}]}]}"#])
+        let fallbackClient = YCodingConnectionClient(
+            processRunner: fallbackRunner,
+            http: transportFailHTTP,
+            files: files,
+            locationDirectory: "/fixture/home",
+            serviceFilePath: "/fixture/state/ycoding/service.json"
+        )
+        let fallbackConnections = try await fallbackClient.connections()
+        XCTAssertEqual(fallbackConnections.map(\.id), ["cred_fallback"])
+        XCTAssertEqual(fallbackRunner.calls.count, 1)
+
+        let deadPidFiles = FakeFiles([
+            "/fixture/state/ycoding/service.json": #"{"url":"http://127.0.0.1:42188","password":"synthetic-password","pid":\#(Int32.max)}"#
+        ])
+        let deadPidRunner = StubRunner([#"{"data":[{"id":"openai","connections":[{"type":"credential","id":"cred_dead_pid","label":"Work","active":true}]}]}"#])
+        let deadPidHTTP = StubHTTPClient([])
+        let deadPidClient = YCodingConnectionClient(
+            processRunner: deadPidRunner,
+            http: deadPidHTTP,
+            files: deadPidFiles,
+            locationDirectory: "/fixture/home",
+            serviceFilePath: "/fixture/state/ycoding/service.json"
+        )
+        let deadPidConnections = try await deadPidClient.connections()
+        XCTAssertEqual(deadPidConnections.map(\.id), ["cred_dead_pid"])
+        XCTAssertEqual(deadPidRunner.calls.count, 1)
+        XCTAssertTrue(deadPidHTTP.calls.isEmpty)
+    }
+
+    func testDailyUsagePaginatesAndValidatesDayReport() async throws {
+        let page1 = #"{"data":{"group":"day","rows":[{"key":"2026-11-04","physical":1,"cost":1.25,"tokens":{"input":10,"output":20,"reasoning":5,"cache":{"read":30,"write":40}}}],"rowCount":2,"nextOffset":1}}"#
+        let page2 = #"{"data":{"group":"day","rows":[{"key":"2026-11-05","physical":1,"cost":2.5,"tokens":{"input":1,"output":2,"reasoning":3,"cache":{"read":4,"write":5}}}],"rowCount":2}}"#
+        let runner = StubRunner([page1, page2])
+        let client = YCodingConnectionClient(processRunner: runner)
+        let series = try await client.dailyUsage(
+            providerID: "anthropic",
+            profile: "Work",
+            from: Date(timeIntervalSince1970: 10),
+            to: Date(timeIntervalSince1970: 20)
+        )
+
+        XCTAssertEqual(series.daily.map(\.date), ["2026-11-05", "2026-11-04"])
+        XCTAssertEqual(series.daily, [
+            DailyUsageEntry(date: "2026-11-05", totalTokens: 15, costUSD: 2.5),
+            DailyUsageEntry(date: "2026-11-04", totalTokens: 105, costUSD: 1.25)
+        ])
+        XCTAssertEqual(runner.calls.count, 2)
+        XCTAssertEqual(runner.calls[0].arguments, [
+            "api", "usage.report", "--param", "group=day", "--param", "providerID=anthropic",
+            "--param", "profile=Work", "--param", "from=10000", "--param", "to=20000",
+            "--param", "offset=0", "--param", "limit=200", "--param", "sort=key", "--param", "order=asc"
+        ])
+        XCTAssertTrue(runner.calls[1].arguments.contains("offset=1"))
+    }
+
     private func connection(id: String, profile: String) -> YCodingConnection {
         .init(integrationID: "openai", id: id, profile: profile, active: true)
     }
@@ -228,5 +313,26 @@ private final class StubRunner: ProcessRunning, @unchecked Sendable {
         recorded.append(.init(executable: executable, arguments: arguments, environment: environment))
         guard !results.isEmpty else { throw YCodingConnectionClientError.unavailable }
         return results.removeFirst()
+    }
+}
+
+private final class StubHTTPClient: HTTPClient, @unchecked Sendable {
+    private let lock = NSLock()
+    private var responses: [Result<HTTPResponse, Error>]
+    private var recorded: [HTTPRequest] = []
+    var calls: [HTTPRequest] { lock.withLock { recorded } }
+
+    init(_ responses: [Result<HTTPResponse, Error>] = []) {
+        self.responses = responses
+    }
+
+    func send(_ request: HTTPRequest) async throws -> HTTPResponse {
+        try lock.withLock {
+            recorded.append(request)
+            guard !responses.isEmpty else {
+                throw URLError(.cannotConnectToHost)
+            }
+            return try responses.removeFirst().get()
+        }
     }
 }

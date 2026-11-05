@@ -5,10 +5,20 @@ struct YCodingProviderAssembly {
     let providers: [ProviderRuntime]
     let identityKeysByCard: [String: String]
 
+    nonisolated static func defaultServiceFilePath(
+        environment: EnvironmentReading = ProcessEnvironmentReader(),
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> String {
+        YCodingPaths.serviceFilePath(
+            stateDirectory: YCodingPaths.stateDirectory(environment: environment, homeDirectory: homeDirectory)
+        )
+    }
+
     static func make(client: (any YCodingConnectionReading)? = nil) async -> Self {
         if client == nil, !isInstalled { return Self(providers: [], identityKeysByCard: [:]) }
         let bridge = YCodingConnectionBridge(client: client ?? YCodingConnectionClient(
-            locationDirectory: FileManager.default.homeDirectoryForCurrentUser.path
+            locationDirectory: FileManager.default.homeDirectoryForCurrentUser.path,
+            serviceFilePath: defaultServiceFilePath()
         ))
         do {
             let connections = try await bridge.discover()
@@ -25,6 +35,7 @@ struct YCodingProviderAssembly {
     }
 
     private static var isInstalled: Bool {
+        if FileManager.default.fileExists(atPath: defaultServiceFilePath()) { return true }
         let executable = YCodingConnectionClient.defaultExecutable()
         if executable != "ycoding" { return true }
         return (ProcessInfo.processInfo.environment["PATH"] ?? "").split(separator: ":").contains {

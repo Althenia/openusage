@@ -134,6 +134,31 @@ struct YCodingProfileUsage: Equatable, Sendable {
     let physical: Int
     var estimatedRequests: Int = 0
     var usesOpenUsagePricing: Bool = false
+    var models: [ModelUsageEntry] = []
+
+    init(
+        providerID: String,
+        profile: String,
+        cost: Double?,
+        costProvenance: String?,
+        costCoverage: YCodingCostCoverage?,
+        tokens: YCodingTokenUsage,
+        physical: Int,
+        estimatedRequests: Int = 0,
+        usesOpenUsagePricing: Bool = false,
+        models: [ModelUsageEntry] = []
+    ) {
+        self.providerID = providerID
+        self.profile = profile
+        self.cost = cost
+        self.costProvenance = costProvenance
+        self.costCoverage = costCoverage
+        self.tokens = tokens
+        self.physical = physical
+        self.estimatedRequests = estimatedRequests
+        self.usesOpenUsagePricing = usesOpenUsagePricing
+        self.models = models
+    }
 
     var hasIncompleteCost: Bool {
         cost == nil || costCoverage == nil || (costCoverage?.unpricedRequests ?? 0) > estimatedRequests

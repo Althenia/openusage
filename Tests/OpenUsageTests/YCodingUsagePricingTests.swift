@@ -118,6 +118,16 @@ final class YCodingUsagePricingTests: XCTestCase {
         for provider in ["openai", "anthropic", "antigravity", "muse", "cursor"] {
             let connection = YCodingConnection(integrationID: provider, id: "fixture", profile: "Work", active: true)
             let rows = try YCodingUsagePricing.aggregate([row(provider: provider)], pricing: pricing())
+            let result = try XCTUnwrap(rows.first)
+            XCTAssertTrue(
+                result.models.contains(ModelUsageEntry(model: "fixture-model", totalTokens: 165, costUSD: 0.000458)) ||
+                result.models.contains { $0.model == "fixture-model" && $0.totalTokens == 165 && abs(($0.costUSD ?? 0) - 0.000458) < 1e-12 }
+            )
+            let entry = try XCTUnwrap(result.models.first)
+            XCTAssertEqual(entry.model, "fixture-model")
+            XCTAssertEqual(entry.totalTokens, 165)
+            XCTAssertEqual(try XCTUnwrap(entry.costUSD), 0.000458, accuracy: 1e-12)
+
             let snapshot = YCodingConnectionMapper.snapshot(for: connection, read: .init(connections: [connection],
                 quotas: [], today: rows, yesterday: [], last30: [], warning: nil))
             guard case .values(_, let values, _, _, _, _) = snapshot.line(label: "Today") else { return XCTFail("Expected usage value") }
@@ -125,7 +135,8 @@ final class YCodingUsagePricingTests: XCTestCase {
             XCTAssertTrue(values.first?.estimated == true)
             XCTAssertFalse(snapshot.warning?.contains("incomplete") == true)
             let descriptors = YCodingConnectionMapper.descriptors(for: connection)
-            XCTAssertFalse(descriptors.contains(where: \.isSpendTile))
+            XCTAssertTrue(descriptors.contains(where: \.isSpendTile))
+            XCTAssertTrue(descriptors.contains { $0.id == "\(connection.cardID).trend" })
             XCTAssertTrue(descriptors.contains { $0.title == "Last 30 Days" })
         }
     }

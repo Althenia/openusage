@@ -12,13 +12,14 @@ as a Muse subscription.
 
 ## Connecting
 
-Keep YCoding installed and configure the connections there. OpenUsage discovers those connections at
-startup through the local `ycoding` CLI. Restart OpenUsage after adding, removing, reconnecting, or
-renaming a YCoding connection.
+Keep YCoding installed and configure the connections there. OpenUsage auto-discovers the running local
+YCoding background service (`service.json` in the YCoding state directory) and queries its HTTP API directly,
+falling back to the `ycoding` CLI when the service is not running. Restart OpenUsage after adding, removing,
+reconnecting, or renaming a YCoding connection.
 
 This integration reads connection metadata and usage reports through YCoding's existing API. It does
 not copy YCoding tokens or keys, export credentials, create accounts, or change authentication settings.
-YCoding remains responsible for provider requests and renewing its own login. Calling its CLI may
+YCoding remains responsible for provider requests and renewing its own login. Calling its CLI or API may
 start YCoding's managed local service, and fetching usage may cause YCoding to contact providers.
 Its public quota-list API reads configured connections together, so refreshing one profile can
 refresh YCoding's quota cache for other connections too. Turning off a card hides it in OpenUsage;
@@ -28,7 +29,8 @@ it does not disconnect that account in YCoding.
 
 A card belongs to one YCoding connection, identified by its stable connection ID and exact profile.
 Changing the active connection does not move usage between cards. Two profiles are kept separate even
-when they belong to the same provider account.
+when they belong to the same provider account. Each YCoding profile card includes a **Usage Trend**
+sparkline and model-level hover breakdowns on **Today**, **Yesterday**, and **Last 30 Days**.
 
 Quota meters show only allowances that YCoding can report for that profile. Availability varies by
 provider, connection, and plan. A missing allowance is not treated as zero remaining usage.
@@ -70,9 +72,7 @@ the public report does not separate their token counts. OpenUsage keeps the reco
 of estimating the same tokens again. Long-context estimates require enough information to identify
 the applicable rate tier. Incomplete totals retain a warning; missing prices never become zero.
 
-All YCoding usage-value rows remain separate from **Total Spend**. They do not establish billed charges,
-and native account-wide histories can include the same requests. The connection metadata cannot prove
-whether those sources overlap.
+YCoding profile usage-value rows participate in the **Total Spend** ring chart (Cost, Cost/MTok, and Tokens).
 
 An ordinary OpenAI or Anthropic API key can contribute recorded YCoding usage without granting
 organization reporting access. This does not turn that key into an Admin API key. The separate
@@ -87,8 +87,8 @@ to require their dedicated organization Admin credentials.
   Recorded local usage and an account's subscription quota are different measurements.
 - **Older activity is missing:** activity without an explicit profile cannot be safely assigned to
   the current connection.
-- **YCoding could not be reached:** check that the local `ycoding` CLI works and try again. OpenUsage
-  reports a failure rather than displaying invented usage.
+- **YCoding could not be reached:** check that the local YCoding background service or `ycoding` CLI
+  works and try again. OpenUsage reports a failure rather than displaying invented usage.
 - **YCoding returned incompatible usage:** update YCoding so its connection and usage interfaces
   match the current reporting contract.
 

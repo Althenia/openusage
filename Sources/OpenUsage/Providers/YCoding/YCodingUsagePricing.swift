@@ -24,6 +24,14 @@ enum YCodingUsagePricing {
                               costProvenance: nil, costCoverage: usage.costCoverage, tokens: usage.tokens,
                               physical: usage.physical, estimatedRequests: usage.physical, usesOpenUsagePricing: true)
             }
+            let totalTokens = usage.tokens.input + usage.tokens.output + usage.tokens.reasoning + usage.tokens.cache.read + usage.tokens.cache.write
+            if usage.physical > 0 {
+                let modelName = row.modelID?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? ModelUsageEntry.unattributedModelName
+                let tokenCount = Int(min(max(totalTokens.rounded(), 0), 1_000_000_000_000_000))
+                if tokenCount > 0 || (usage.cost ?? 0) > 0 {
+                    usage.models = [ModelUsageEntry(model: modelName, totalTokens: tokenCount, costUSD: usage.cost)]
+                }
+            }
             let key = [usage.providerID, usage.profile]
             if let prior = totals[key] {
                 totals[key] = try merge(prior, usage)
@@ -97,6 +105,7 @@ enum YCodingUsagePricing {
                                                 write: try number(lhs.tokens.cache.write, rhs.tokens.cache.write))),
                      physical: try count(lhs.physical, rhs.physical),
                      estimatedRequests: try count(lhs.estimatedRequests, rhs.estimatedRequests),
-                     usesOpenUsagePricing: lhs.usesOpenUsagePricing || rhs.usesOpenUsagePricing)
+                     usesOpenUsagePricing: lhs.usesOpenUsagePricing || rhs.usesOpenUsagePricing,
+                     models: lhs.models + rhs.models)
     }
 }

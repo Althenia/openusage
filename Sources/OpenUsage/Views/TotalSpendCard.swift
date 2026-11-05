@@ -384,6 +384,7 @@ enum TotalSpendPalette {
         "openrouter": hex(0x6467F2),                         // OpenRouter indigo
         "antigravity": hex(0x4285F4),                        // Google blue
         "copilot": hex(0xA855F7),                            // Copilot purple
+        "muse": hex(0x0064E0),
         "amp": hex(0xF34E3F),
         "factory": dynamic(light: 0x48484A, dark: 0xC7C7CC),
         "kimi": hex(0x0A66FF),
@@ -394,7 +395,8 @@ enum TotalSpendPalette {
     /// Deterministic backstop hues for a provider that ships without a palette entry — keyed off the
     /// provider ID (not rank), so the color holds steady across periods and launches.
     private static let fallback: [Color] = [
-        hex(0x34C759), hex(0x5856D6), hex(0xFF2D55), hex(0xA2845E)
+        hex(0x34C759), hex(0x5856D6), hex(0xFF2D55), hex(0xA2845E),
+        hex(0xFF9500), hex(0x5AC8FA), hex(0xAF52DE), hex(0x00C7BE)
     ]
 
     static func color(for providerID: String) -> Color {

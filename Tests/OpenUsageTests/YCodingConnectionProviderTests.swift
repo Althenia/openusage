@@ -296,7 +296,7 @@ final class YCodingConnectionProviderTests: XCTestCase {
         }
     }
 
-    func testCursorRecordedUsageDoesNotDoubleCountNativeAccountWideSpend() {
+    func testProfileDescriptorsExposeSpendTilesAndUsageTrendForTotalSpendAndChart() {
         let cursor = connection("cursor", id: "cursor", profile: "Work")
         let openai = connection("openai", id: "openai", profile: "Work")
         let cursorSpend = YCodingConnectionMapper.descriptors(for: cursor).filter {
@@ -307,8 +307,68 @@ final class YCodingConnectionProviderTests: XCTestCase {
         }
 
         XCTAssertEqual(cursorSpend.count, 3)
-        XCTAssertTrue(cursorSpend.allSatisfy { !$0.isSpendTile })
-        XCTAssertTrue(openaiSpend.allSatisfy { !$0.isSpendTile })
+        XCTAssertTrue(cursorSpend.allSatisfy(\.isSpendTile))
+        XCTAssertTrue(openaiSpend.allSatisfy(\.isSpendTile))
+        XCTAssertTrue(YCodingConnectionMapper.descriptors(for: cursor).contains { $0.id == "\(cursor.cardID).trend" && $0.sample.isChart })
+        XCTAssertEqual(YCodingConnectionMapper.descriptors(for: cursor).compactMap(\.historyResource).count, 1)
+    }
+
+    func testSnapshotIncludesUsageTrendModelBreakdownAndContributesToTotalSpend() {
+        let work = connection("openai", id: "work", profile: "Work")
+        let anthropic = connection("anthropic", id: "claude", profile: "Personal")
+
+        let workUsage = YCodingProfileUsage(
+            providerID: "openai",
+            profile: "Work",
+            cost: 2,
+            costProvenance: "recorded",
+            costCoverage: .init(pricedRequests: 1, unpricedRequests: 0),
+            tokens: .init(input: 1, output: 2, reasoning: 3, cache: .init(read: 4, write: 5)),
+            physical: 1,
+            models: [ModelUsageEntry(model: "gpt-6.1-sol", totalTokens: 15, costUSD: 2)]
+        )
+        let anthropicUsage = usage(anthropic, cost: 3)
+
+        let read = YCodingConnectionRead(
+            connections: [work, anthropic],
+            quotas: [quota(work), quota(anthropic)],
+            today: [workUsage, anthropicUsage],
+            yesterday: [],
+            last30: [],
+            dailyByProfile: [
+                ["openai", "Work"]: DailyUsageSeries(daily: [
+                    DailyUsageEntry(date: DailyUsageAccumulator.dayKey(from: instant), totalTokens: 15, costUSD: 2)
+                ])
+            ],
+            warning: nil
+        )
+
+        let workSnapshot = YCodingConnectionMapper.snapshot(for: work, read: read, now: instant)
+        let anthropicSnapshot = YCodingConnectionMapper.snapshot(for: anthropic, read: read, now: instant)
+
+        guard let trendLine = workSnapshot.line(label: "Usage Trend"),
+              case .chart(let trendLabel, let points, let note) = trendLine else {
+            return XCTFail("Expected chart line for Usage Trend")
+        }
+        XCTAssertEqual(trendLabel, "Usage Trend")
+        XCTAssertEqual(points.count, 31)
+        XCTAssertEqual(note, YCodingConnectionMapper.usageSourceNote)
+
+        guard let todayLine = workSnapshot.line(label: "Today"),
+              case .values(_, _, _, _, _, let modelBreakdown) = todayLine else {
+            return XCTFail("Expected values line for Today")
+        }
+        XCTAssertEqual(modelBreakdown?.models.map(\.model), ["gpt-6.1-sol"])
+        XCTAssertEqual(modelBreakdown?.totalCostUSD, 2)
+
+        let total = TotalSpendAggregator.total(
+            for: .today,
+            providers: [work.provider, anthropic.provider],
+            snapshots: [work.cardID: workSnapshot, anthropic.cardID: anthropicSnapshot]
+        )
+        XCTAssertEqual(Set(total.projection(for: .cost).slices.map(\.id)), [work.cardID, anthropic.cardID])
+        XCTAssertEqual(Set(total.projection(for: .tokens).slices.map(\.id)), [work.cardID, anthropic.cardID])
+        XCTAssertEqual(Set(total.projection(for: .costPerMtok).slices.map(\.id)), [work.cardID, anthropic.cardID])
     }
 
     private func connection(_ integration: String, id: String, profile: String, active: Bool = true) -> YCodingConnection {

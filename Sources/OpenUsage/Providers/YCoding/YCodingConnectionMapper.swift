@@ -1,6 +1,8 @@
 import Foundation
 
 enum YCodingConnectionMapper {
+    static let usageSourceNote = "From your YCoding usage report"
+
     struct Slot {
         let suffix: String
         let title: String
@@ -41,16 +43,30 @@ enum YCodingConnectionMapper {
             WidgetDescriptor.percent(id: "\(provider.id).\(slot.suffix)", provider: provider, title: slot.title)
                 .exportingLimit(slot.suffix, unit: "percent")
         }
-        let spend = WidgetDescriptor.spendTiles(provider: provider,
-            valueTooltipNote: "Recorded or estimated model usage value, not a credit balance, billed charge, or subscription allowance.").map {
-            // Public reports establish model usage value, not billed charges. Keep these values
-            // separate from Total Spend; native account-wide histories can also overlap them.
+        let trend = WidgetDescriptor.usageTrend(provider: provider)
+            .exportingHistory(
+                scope: .machineLocal,
+                estimatedCost: true,
+                sourceNote: usageSourceNote
+            )
+        let spend = WidgetDescriptor.spendTiles(
+            provider: provider,
+            valueTooltipNote: "Recorded or estimated model usage value, not a credit balance, billed charge, or subscription allowance."
+        ).map {
             var sample = $0.sample
             sample.dollarLabelAsSubtitle = true
-            return WidgetDescriptor(id: $0.id, providerID: $0.providerID, metricLabel: $0.metricLabel,
-                                    sample: sample, pinnable: $0.pinnable, isSpendTile: false)
+            return WidgetDescriptor(
+                id: $0.id,
+                providerID: $0.providerID,
+                metricLabel: $0.metricLabel,
+                sample: sample,
+                pinnable: $0.pinnable,
+                isSpendTile: $0.isSpendTile,
+                limitResources: $0.limitResources,
+                historyResource: $0.historyResource
+            )
         }
-        return quotas + spend
+        return quotas + [trend] + spend
     }
 
     static func snapshot(for connection: YCodingConnection, read: YCodingConnectionRead, now: Date = Date()) -> ProviderSnapshot {
@@ -115,11 +131,16 @@ enum YCodingConnectionMapper {
             let tokens = usage.tokens
             let total = tokens.input + tokens.output + tokens.reasoning + tokens.cache.read + tokens.cache.write
             values.append(.init(number: total, kind: .count, label: "tokens"))
-            lines.append(.values(label: label, values: values))
+            let totalTokens = Int(min(max(total.rounded(), 0), 1_000_000_000_000_000))
+            let breakdown = makeModelBreakdown(for: usage, totalTokens: totalTokens)
+            lines.append(.values(label: label, values: values, modelBreakdown: breakdown))
             if usage.hasIncompleteCost {
                 warnings.append("Some recorded YCoding usage cannot be priced reliably; its usage value is incomplete.")
             }
         }
+        let dailySeries = read.dailyByProfile[[connection.integrationID, connection.profile]]
+            ?? fallbackDailySeries(today: matching(read.today), yesterday: matching(read.yesterday), now: now)
+        SpendTileMapper.appendUsageTrend(dailySeries, to: &lines, now: now, note: usageSourceNote)
         if connection.integrationID == "muse", let usage = matching(read.last30), usage.physical > 0 {
             warnings.append("YCoding recorded \(usage.physical) requests for this profile in the last 30 days.")
         }
@@ -137,6 +158,56 @@ enum YCodingConnectionMapper {
         return .make(provider: connection.provider, plan: connection.sourceLabel, lines: lines,
                      refreshedAt: displaysQuota ? quota.map { Date(timeIntervalSince1970: $0.updatedAt / 1000) } ?? now : now,
                      warning: warning)
+    }
+
+    private static func makeModelBreakdown(for usage: YCodingProfileUsage, totalTokens: Int) -> ModelUsageBreakdown? {
+        let filtered = usage.models.compactMap { entry -> ModelUsageEntry? in
+            guard entry.totalTokens > 0 || (entry.costUSD ?? 0) > 0 else { return nil }
+            var rounded = entry
+            rounded.costUSD = entry.costUSD.map { ($0 * 100).rounded() / 100 }
+            return rounded
+        }
+        let sortedModels = filtered.sorted { lhs, rhs in
+            let lhsCost = lhs.costUSD ?? 0
+            let rhsCost = rhs.costUSD ?? 0
+            if lhsCost != rhsCost { return lhsCost > rhsCost }
+            if lhs.totalTokens != rhs.totalTokens { return lhs.totalTokens > rhs.totalTokens }
+            return lhs.model.localizedStandardCompare(rhs.model) == .orderedAscending
+        }
+        guard !sortedModels.isEmpty else { return nil }
+        return ModelUsageBreakdown(
+            totalTokens: totalTokens,
+            totalCostUSD: usage.cost,
+            models: sortedModels,
+            sourceNote: usageSourceNote
+        )
+    }
+
+    private static func fallbackDailySeries(
+        today: YCodingProfileUsage?,
+        yesterday: YCodingProfileUsage?,
+        now: Date
+    ) -> DailyUsageSeries {
+        var daily: [DailyUsageEntry] = []
+        if let yesterday {
+            let tokens = yesterday.tokens
+            let total = tokens.input + tokens.output + tokens.reasoning + tokens.cache.read + tokens.cache.write
+            let tokenCount = Int(min(max(total.rounded(), 0), 1_000_000_000_000_000))
+            if (yesterday.physical > 0 || tokenCount > 0 || (yesterday.cost ?? 0) > 0),
+               let dayKey = Calendar.current.date(byAdding: .day, value: -1, to: now).map({ DailyUsageAccumulator.dayKey(from: $0) }) {
+                daily.append(DailyUsageEntry(date: dayKey, totalTokens: tokenCount, costUSD: yesterday.cost))
+            }
+        }
+        if let today {
+            let tokens = today.tokens
+            let total = tokens.input + tokens.output + tokens.reasoning + tokens.cache.read + tokens.cache.write
+            let tokenCount = Int(min(max(total.rounded(), 0), 1_000_000_000_000_000))
+            if today.physical > 0 || tokenCount > 0 || (today.cost ?? 0) > 0 {
+                let dayKey = DailyUsageAccumulator.dayKey(from: now)
+                daily.append(DailyUsageEntry(date: dayKey, totalTokens: tokenCount, costUSD: today.cost))
+            }
+        }
+        return DailyUsageSeries(daily: daily)
     }
 
     private static func matches(_ window: YCodingQuotaWindow, slot: Slot, integration: String) -> Bool {

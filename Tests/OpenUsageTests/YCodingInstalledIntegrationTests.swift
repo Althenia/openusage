@@ -9,7 +9,10 @@ final class YCodingInstalledIntegrationTests: XCTestCase {
         guard ProcessInfo.processInfo.environment["OPENUSAGE_YCODING_LIVE_TEST"] == "1" else {
             throw XCTSkip("Set OPENUSAGE_YCODING_LIVE_TEST=1 to verify the installed YCoding service.")
         }
-        let client = YCodingConnectionClient(locationDirectory: FileManager.default.homeDirectoryForCurrentUser.path)
+        let client = YCodingConnectionClient(
+            locationDirectory: FileManager.default.homeDirectoryForCurrentUser.path,
+            serviceFilePath: YCodingProviderAssembly.defaultServiceFilePath()
+        )
         let bridge = YCodingConnectionBridge(client: client)
         let connections = try await bridge.discover()
         XCTAssertFalse(connections.isEmpty, "This opt-in smoke requires a configured supported connection.")

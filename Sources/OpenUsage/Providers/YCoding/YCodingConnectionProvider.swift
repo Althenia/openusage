@@ -32,7 +32,26 @@ struct YCodingConnectionRead: Sendable {
     let today: [YCodingProfileUsage]
     let yesterday: [YCodingProfileUsage]
     let last30: [YCodingProfileUsage]
+    let dailyByProfile: [[String]: DailyUsageSeries]
     let warning: String?
+
+    init(
+        connections: [YCodingConnection],
+        quotas: [YCodingQuotaSnapshot],
+        today: [YCodingProfileUsage],
+        yesterday: [YCodingProfileUsage],
+        last30: [YCodingProfileUsage],
+        dailyByProfile: [[String]: DailyUsageSeries] = [:],
+        warning: String?
+    ) {
+        self.connections = connections
+        self.quotas = quotas
+        self.today = today
+        self.yesterday = yesterday
+        self.last30 = last30
+        self.dailyByProfile = dailyByProfile
+        self.warning = warning
+    }
 }
 
 /// All profile cards share one bounded read so automatic refreshes do not multiply provider probes.
@@ -92,6 +111,39 @@ final class YCodingConnectionBridge {
                 warning = [warning, notice].compactMap { $0 }.joined(separator: " ")
                 AppLog.error("plugin:ycoding", notice)
             }
+            var seenProfiles = Set<[String]>()
+            var distinctActive: [(providerID: String, profile: String)] = []
+            for usage in reports.2 ?? [] where usage.physical > 0 {
+                let key = [usage.providerID, usage.profile]
+                if seenProfiles.insert(key).inserted,
+                   before.contains(where: { $0.integrationID == usage.providerID && $0.profile == usage.profile }) {
+                    distinctActive.append((usage.providerID, usage.profile))
+                }
+            }
+            var dailyByProfile: [[String]: DailyUsageSeries] = [:]
+            await withTaskGroup(of: ([String], DailyUsageSeries)?.self) { group in
+                for item in distinctActive {
+                    group.addTask {
+                        do {
+                            let series = try await client.dailyUsage(
+                                providerID: item.providerID,
+                                profile: item.profile,
+                                from: month,
+                                to: instant.addingTimeInterval(0.001)
+                            )
+                            if !series.daily.isEmpty {
+                                return ([item.providerID, item.profile], series)
+                            }
+                        } catch {}
+                        return nil
+                    }
+                }
+                for await result in group {
+                    if let (key, series) = result {
+                        dailyByProfile[key] = series
+                    }
+                }
+            }
             let after = try await client.connections()
             // Changes in the active flag do not change identity, but additions/removals/renames do.
             let identity: (YCodingConnection) -> String = { "\($0.cardID)|\($0.profile)|\($0.authentication.rawValue)" }
@@ -100,7 +152,7 @@ final class YCodingConnectionBridge {
             }
             return YCodingConnectionRead(connections: after, quotas: quotas,
                                          today: reports.0 ?? [], yesterday: reports.1 ?? [], last30: reports.2 ?? [],
-                                         warning: warning)
+                                         dailyByProfile: dailyByProfile, warning: warning)
         }
         let id = UUID()
         pending = (id, manual, task)
