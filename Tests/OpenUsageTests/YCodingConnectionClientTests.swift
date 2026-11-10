@@ -253,6 +253,7 @@ final class YCodingConnectionClientTests: XCTestCase {
         let series = try await client.dailyUsage(
             providerID: "anthropic",
             profile: "Work",
+            estimatedModels: [],
             from: Date(timeIntervalSince1970: 10),
             to: Date(timeIntervalSince1970: 20)
         )
@@ -269,6 +270,54 @@ final class YCodingConnectionClientTests: XCTestCase {
             "--param", "offset=0", "--param", "limit=200", "--param", "sort=key", "--param", "order=asc"
         ])
         XCTAssertTrue(runner.calls[1].arguments.contains("offset=1"))
+    }
+
+    func testDailyUsageReplacesEstimatedModelSubtotalsWithTokenPricing() async throws {
+        let all = #"{"data":{"group":"day","rows":[{"key":"2026-11-04","physical":3,"cost":1.5,"tokens":{"input":101,"output":22,"reasoning":5,"cache":{"read":43,"write":10}}},{"key":"2026-11-05","physical":1,"cost":4,"tokens":{"input":1,"output":1,"reasoning":0,"cache":{"read":0,"write":0}}}],"rowCount":2}}"#
+        let model = #"{"data":{"group":"day","rows":[{"key":"2026-11-04","physical":2,"cost":0.5,"costCoverage":{"pricedRequests":1,"unpricedRequests":1},"tokens":{"input":100,"output":20,"reasoning":5,"cache":{"read":40,"write":10}}}],"rowCount":1}}"#
+        let runner = StubRunner([all, model])
+        let pricing = ModelPricing(supplement: .init(), primary: .init(entries: ["fixture-model":
+            .init(inputPerMillion: 2, outputPerMillion: 10, cacheWritePerMillion: 2.5, cacheReadPerMillion: 0.2)]), secondary: .init())
+        let series = try await YCodingConnectionClient(processRunner: runner, pricing: { pricing }).dailyUsage(
+            providerID: "anthropic", profile: "Work", estimatedModels: ["fixture-model"],
+            from: Date(timeIntervalSince1970: 10), to: Date(timeIntervalSince1970: 20))
+
+        XCTAssertEqual(series.daily.map(\.date), ["2026-11-05", "2026-11-04"])
+        XCTAssertEqual(series.daily[0].costUSD, 4)
+        XCTAssertEqual(try XCTUnwrap(series.daily[1].costUSD), 1.000483, accuracy: 1e-12)
+        XCTAssertEqual(series.daily[1].totalTokens, 181)
+        XCTAssertEqual(runner.calls.count, 2)
+        XCTAssertTrue(runner.calls[1].arguments.contains("modelID=fixture-model"))
+        XCTAssertTrue(runner.calls[1].arguments.contains("profile=Work"))
+    }
+
+    func testDailyUsageMergesRecordedModelsWithMixedEstimateAndKeepsUnresolvableOrUnpricedDays() async throws {
+        let all = #"{"data":{"group":"day","rows":[{"key":"2026-11-01","physical":5,"cost":3.5,"tokens":{"input":200,"output":40,"reasoning":5,"cache":{"read":80,"write":10}}},{"key":"2026-11-02","physical":2,"tokens":{"input":100,"output":20,"reasoning":5,"cache":{"read":40,"write":0}}},{"key":"2026-11-03","physical":1,"cost":0.75,"tokens":{"input":9,"output":9,"reasoning":0,"cache":{"read":0,"write":0}}}],"rowCount":3}}"#
+        let mixed = #"{"data":{"group":"day","rows":[{"key":"2026-11-01","physical":2,"cost":0.5,"costCoverage":{"pricedRequests":1,"unpricedRequests":1},"tokens":{"input":100,"output":20,"reasoning":5,"cache":{"read":40,"write":10}}},{"key":"2026-11-02","physical":2,"costCoverage":{"pricedRequests":0,"unpricedRequests":2},"tokens":{"input":100,"output":20,"reasoning":5,"cache":{"read":40,"write":0}}}],"rowCount":2}}"#
+        let unknown = #"{"data":{"group":"day","rows":[{"key":"2026-11-03","physical":1,"cost":0.25,"costCoverage":{"pricedRequests":0,"unpricedRequests":1},"tokens":{"input":9,"output":9,"reasoning":0,"cache":{"read":0,"write":0}}}],"rowCount":1}}"#
+        let runner = StubRunner([all, mixed, unknown])
+        let pricing = ModelPricing(supplement: .init(), primary: .init(entries: ["fixture-model":
+            .init(inputPerMillion: 2, outputPerMillion: 10, cacheWritePerMillion: 2.5, cacheReadPerMillion: 0.2)]), secondary: .init())
+        let series = try await YCodingConnectionClient(processRunner: runner, pricing: { pricing }).dailyUsage(
+            providerID: "anthropic", profile: "Work", estimatedModels: ["fixture-model", "unpriced-model"],
+            from: Date(timeIntervalSince1970: 10), to: Date(timeIntervalSince1970: 20))
+        let byDay = Dictionary(uniqueKeysWithValues: series.daily.map { ($0.date, $0.costUSD) })
+
+        XCTAssertEqual(try XCTUnwrap(byDay["2026-11-01"] ?? nil), 3.000483, accuracy: 1e-12,
+                       "Other models' recorded 3.00 plus the mixed model's estimate, without its 0.50 subtotal")
+        XCTAssertEqual(try XCTUnwrap(byDay["2026-11-02"] ?? nil), 0.000458, accuracy: 1e-12,
+                       "A day with no recorded cost gains only the estimate")
+        XCTAssertEqual(byDay["2026-11-03"] ?? nil, 0.75, "An unresolvable model keeps the recorded day value")
+        XCTAssertEqual(runner.calls.map { $0.arguments.first { $0.hasPrefix("modelID=") } },
+                       [nil, "modelID=fixture-model", "modelID=unpriced-model"])
+    }
+
+    func testDailyUsageWithoutAnyCostStaysUnpriced() async throws {
+        let all = #"{"data":{"group":"day","rows":[{"key":"2026-11-02","physical":2,"tokens":{"input":1,"output":1,"reasoning":0,"cache":{"read":0,"write":0}}}],"rowCount":1}}"#
+        let series = try await YCodingConnectionClient(processRunner: StubRunner([all])).dailyUsage(
+            providerID: "muse", profile: "Work", estimatedModels: [],
+            from: Date(timeIntervalSince1970: 10), to: Date(timeIntervalSince1970: 20))
+        XCTAssertEqual(series.daily, [DailyUsageEntry(date: "2026-11-02", totalTokens: 2, costUSD: nil)])
     }
 
     private func connection(id: String, profile: String) -> YCodingConnection {

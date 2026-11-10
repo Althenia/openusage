@@ -5,11 +5,13 @@ protocol YCodingConnectionReading: Sendable {
     func connections() async throws -> [YCodingConnection]
     func snapshots(refresh: Bool) async throws -> [YCodingQuotaSnapshot]
     func usage(from: Date, to: Date) async throws -> [YCodingProfileUsage]
-    func dailyUsage(providerID: String, profile: String, from: Date, to: Date) async throws -> DailyUsageSeries
+    func dailyUsage(providerID: String, profile: String, estimatedModels: [String],
+                    from: Date, to: Date) async throws -> DailyUsageSeries
 }
 
 extension YCodingConnectionReading {
-    func dailyUsage(providerID: String, profile: String, from: Date, to: Date) async throws -> DailyUsageSeries {
+    func dailyUsage(providerID: String, profile: String, estimatedModels: [String],
+                    from: Date, to: Date) async throws -> DailyUsageSeries {
         DailyUsageSeries(daily: [])
     }
 }
@@ -172,7 +174,8 @@ struct YCodingConnectionClient: YCodingConnectionReading {
         throw failure(.incompleteReport)
     }
 
-    func dailyUsage(providerID: String, profile: String, from: Date, to: Date) async throws -> DailyUsageSeries {
+    func dailyUsage(providerID: String, profile: String, estimatedModels: [String],
+                    from: Date, to: Date) async throws -> DailyUsageSeries {
         guard YCodingConnection.supportedIntegrations.contains(providerID), !profile.isEmpty else {
             throw failure(.malformedResponse)
         }
@@ -180,16 +183,39 @@ struct YCodingConnectionClient: YCodingConnectionReading {
         let end = to.timeIntervalSince1970 * 1000
         guard start.isFinite, end.isFinite, start >= 0, start < end,
               end < Double(Int64.max) else { throw failure(.invalidRange) }
+        let scope = ["providerID=\(providerID)", "profile=\(profile)"]
+        let range = ["from=\(Int64(start))", "to=\(Int64(end))"]
+        let days = try await dayRows(scope + range)
+        var costs = Dictionary(uniqueKeysWithValues: days.map { ($0.key, $0.row.cost) })
+        if !estimatedModels.isEmpty {
+            let rates = await pricing()
+            for model in Set(estimatedModels).sorted() {
+                for day in try await dayRows(scope + ["modelID=\(model)"] + range) {
+                    guard let recorded = costs[day.key] else { throw failure(.malformedResponse) }
+                    let usage = YCodingProfileUsage(providerID: providerID, profile: profile, cost: day.row.cost,
+                                                    costProvenance: day.row.costProvenance, costCoverage: day.row.costCoverage,
+                                                    tokens: day.row.tokens, physical: day.row.physical)
+                    guard let estimate = YCodingUsagePricing.estimate(.init(modelID: model, usage: usage), pricing: rates) else { continue }
+                    costs[day.key] = (recorded ?? 0) - (day.row.cost ?? 0) + estimate
+                }
+            }
+        }
+        let entries = days.filter { $0.row.physical > 0 }.map { day in
+            let tokens = day.row.tokens
+            let total = tokens.input + tokens.output + tokens.reasoning + tokens.cache.read + tokens.cache.write
+            return DailyUsageEntry(date: day.key, totalTokens: Int(min(max(total.rounded(), 0), 1_000_000_000_000_000)),
+                                   costUSD: costs[day.key] ?? nil)
+        }
+        return DailyUsageSeries(daily: entries.sorted { $0.date > $1.date })
+    }
 
-        var entries: [DailyUsageEntry] = []
+    private func dayRows(_ filters: [String]) async throws -> [(key: String, row: UsageRow)] {
+        var rows: [(key: String, row: UsageRow)] = []
         var offset = 0
         var seenDays = Set<String>()
-
         for _ in 0..<100 {
-            let response: Envelope<UsageReport> = try await request("usage.report", parameters: [
-                "group=day", "providerID=\(providerID)", "profile=\(profile)",
-                "from=\(Int64(start))", "to=\(Int64(end))", "offset=\(offset)",
-                "limit=200", "sort=key", "order=asc"
+            let response: Envelope<UsageReport> = try await request("usage.report", parameters: ["group=day"] + filters + [
+                "offset=\(offset)", "limit=200", "sort=key", "order=asc"
             ])
             let report = response.data
             guard report.group == "day", report.rowCount >= 0, report.rows.count <= 200 else {
@@ -205,16 +231,11 @@ struct YCodingConnectionClient: YCodingConnectionReading {
                        row.tokens.cache.read, row.tokens.cache.write].allSatisfy({ $0.isFinite && $0 >= 0 }) else {
                     throw failure(.malformedResponse)
                 }
-                if row.physical > 0 {
-                    let totalTokens = row.tokens.input + row.tokens.output + row.tokens.reasoning +
-                        row.tokens.cache.read + row.tokens.cache.write
-                    let clampedTokens = Int(min(max(totalTokens.rounded(), 0), 1_000_000_000_000_000))
-                    entries.append(DailyUsageEntry(date: key, totalTokens: clampedTokens, costUSD: row.cost))
-                }
+                rows.append((key, row))
             }
             guard let next = report.nextOffset else {
                 guard offset + report.rows.count == report.rowCount else { throw failure(.incompleteReport) }
-                return DailyUsageSeries(daily: entries.sorted { $0.date > $1.date })
+                return rows
             }
             guard next == offset + report.rows.count, next > offset, next < report.rowCount else {
                 throw failure(.incompleteReport)

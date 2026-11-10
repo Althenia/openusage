@@ -39,9 +39,19 @@ can be YCoding's primary window; it remains Weekly and retains its reported rese
 If the window duration is missing or unfamiliar, OpenUsage leaves the quota unavailable instead of
 guessing its period from the primary/secondary position.
 
+OpenAI account cards also show **Extra Usage** (Codex credits, e.g. "$374.80 · 9.4K credits") and
+**Rate Limit Resets** ("2 available") when YCoding reports them, and Anthropic account cards show
+**Extra Usage** spent against its monthly limit. A reported zero is shown as zero. A balance YCoding
+does not report, or reports as unlimited, leaves the row empty instead of showing a number.
+
 Known OpenAI and Anthropic API-key connections show recorded activity without subscription meters.
-YCoding does not provide their remaining credit balances. Missing balances are not shown as zero, and
-usage values do not establish credit consumption. Reporting authorization errors remain visible.
+OpenAI API-key cards show **API Credit Balance**, and Anthropic account cards show **Prepaid Balance**,
+when YCoding can read a USD balance. The OpenAI figure is aggregate API grants and can include different
+grant types; its undocumented endpoint may reject project keys. Anthropic's balance is separate from
+its monthly extra-usage limit and spend. Missing balances are not shown as zero, and usage values do not
+establish credit consumption. Balance rows are enabled below the caret and are not pinned by default.
+Reporting authorization and refresh failures remain visible alongside recorded activity. An OpenAI
+credit balance can also be shown with a warning when organization usage is unavailable.
 Native Claude and Codex cards keep their own login status and source, separate from YCoding profiles.
 
 An explicit refresh can ask YCoding to refresh its Muse account probe. Automatic refreshes do not
@@ -60,17 +70,29 @@ past request.
 
 ## Recorded And Estimated Usage Value
 
-Today, Yesterday, and Last 30 Days preserve prices already recorded by YCoding. If a model group has
-no prices, OpenUsage can use its shared model-pricing catalog when the model and token categories are
-reliable. Those dollars are labeled **estimated usage value**, not billed charges, a credit balance,
-or subscription consumption. This applies to every supported provider, including Muse and Antigravity.
-Each incomplete dollar subtotal is marked **partial** on its own period row.
+Today, Yesterday, Last 30 Days, and the Usage Trend keep prices YCoding recorded for fully priced
+model groups. When any request in a model group is unpriced, OpenUsage prices that group's input,
+output, cache-read, and cache-write tokens through its shared model-pricing catalog instead, replacing
+the partial recorded subtotal so no tokens count twice. YCoding reports cache writes without a five-minute/one-hour breakdown,
+so OpenUsage prices them at the five-minute write rate.
+Those dollars are labeled **estimated usage value**, not billed charges, a credit balance, or
+subscription consumption. This applies to every supported provider, including Muse and Antigravity.
 
-Unknown models or rates, missing cache telemetry, and cache writes with an unknown lifetime remain
-unpriced. A model group containing both priced and unpriced requests also remains partly unpriced:
-the public report does not separate their token counts. OpenUsage keeps the recorded subtotal instead
-of estimating the same tokens again. Long-context estimates require enough information to identify
-the applicable rate tier. Incomplete totals retain a warning; missing prices never become zero.
+When some requests in a group did not report cache reads, YCoding counts their cached input as
+ordinary input. OpenUsage prices it at the full input rate, so that estimate is an upper bound; it is
+exact only when those requests had no cache hits.
+
+On the Usage Trend, a day where a model mixed priced and unpriced requests shows OpenUsage's
+estimate for all of that model's tokens in place of YCoding's partial subtotal; other models keep
+their recorded prices. Days that include models without a known price (for example
+`muse-wonder-full-1.0-contributor` or `muse-spark-1.3-contributor`) understate that day. The trend
+has no per-day partial marker.
+Models the catalog does not know stay unpriced; missing prices never become zero. A period that still
+contains unpriced usage is marked **partial** on its own row, without a card warning. Long-context
+estimates require enough information to identify the applicable rate tier.
+
+Muse cards whose account has no profile-bound quota show Session and Weekly as **No data** next to
+the recorded usage, without a warning.
 
 YCoding profile usage-value rows participate in the **Total Spend** ring chart (Cost, Cost/MTok, and Tokens).
 

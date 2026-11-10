@@ -28,10 +28,10 @@ enum DefaultLayout {
         "antigravity.trend", "antigravity.today", "antigravity.yesterday", "antigravity.last30",
 
         "claude.session", "claude.weekly", "claude.fable", "claude.trend",
-        "claude.extra", "claude.rateLimitResets", "claude.today", "claude.yesterday", "claude.last30",
+        "claude.extra", "claude.rateLimitResets", "claude.prepaid", "claude.today", "claude.yesterday", "claude.last30",
 
         "codex.session", "codex.weekly", "codex.trend",
-        "codex.credits", "codex.rateLimitResets", "codex.today", "codex.yesterday", "codex.last30",
+        "codex.credits", "codex.rateLimitResets", "codex.prepaid", "codex.today", "codex.yesterday", "codex.last30",
 
         "cursor.usage", "cursor.auto", "cursor.api", "cursor.grokBot", "cursor.trend",
         "cursor.onDemand", "cursor.today", "cursor.yesterday", "cursor.last30",
@@ -108,8 +108,8 @@ enum DefaultLayout {
         "antigravity.today", "antigravity.yesterday", "antigravity.last30",
         // Claude's core meters (Session, Weekly, Fable, Extra, Usage Trend) stay above the fold;
         // optional Sonnet, reset grants, and spend-history rows sit below the caret.
-        "claude.sonnet", "claude.rateLimitResets", "claude.today", "claude.yesterday", "claude.last30",
-        "codex.credits", "codex.rateLimitResets", "codex.today", "codex.yesterday", "codex.last30",
+        "claude.sonnet", "claude.rateLimitResets", "claude.prepaid", "claude.today", "claude.yesterday", "claude.last30",
+        "codex.credits", "codex.rateLimitResets", "codex.prepaid", "codex.today", "codex.yesterday", "codex.last30",
         "cursor.grokBot", "cursor.onDemand", "cursor.requests", "cursor.credits",
         "cursor.today", "cursor.yesterday", "cursor.last30",
         // Copilot: Credits (the metered premium pool) + Extra Usage stay above the fold; the org

@@ -66,15 +66,83 @@ enum YCodingConnectionMapper {
                 historyResource: $0.historyResource
             )
         }
-        return quotas + [trend] + spend
+        let balanceTitle = connection.integrationID == "openai" ? "API Credit Balance" : "Prepaid Balance"
+        let supportsBalance = (connection.integrationID == "openai" && connection.authentication != .account)
+            || (connection.integrationID == "anthropic" && connection.authentication != .apiKey)
+        let prepaid: [WidgetDescriptor] = supportsBalance
+            ? [.values(id: "\(provider.id).prepaid", provider: provider, title: balanceTitle, valueWord: "available")
+                .exportingLimit("creditBalance", kind: .balance, unit: "usd", source: .value(kind: .dollars))] : []
+        return quotas + balanceDescriptors(for: connection) + prepaid + [trend] + spend
+    }
+
+    @MainActor
+    private static func balanceDescriptors(for connection: YCodingConnection) -> [WidgetDescriptor] {
+        guard connection.showsSubscriptionQuotas else { return [] }
+        let provider = connection.provider
+        switch connection.integrationID {
+        case "openai":
+            return [
+                .combined(id: "\(provider.id).credits", provider: provider, title: "Extra Usage", metricLabel: "Credits")
+                    .exportingLimit("credits", kind: .balance, unit: "credits", source: .value(kind: .count, label: "credits"))
+                    .exportingLimit("creditValue", kind: .balance, unit: "usd", source: .value(kind: .dollars)),
+                .values(id: "\(provider.id).rateLimitResets", provider: provider, title: "Rate Limit Resets",
+                        metricLabel: "Rate Limit Resets", traySuffix: "resets")
+                    .exportingLimit("rateLimitResets", kind: .balance, unit: "resets", source: .value(kind: .count, label: "available"))
+            ]
+        case "anthropic":
+            return [
+                .boundedDollars(id: "\(provider.id).extra", provider: provider, title: "Extra Usage",
+                                metricLabel: "Extra usage spent", limit: 100, valueWord: "spent")
+                    .exportingLimit("extraUsage", unit: "usd", source: .progressOrValue(kind: .dollars))
+            ]
+        default:
+            return []
+        }
+    }
+
+    private static func balanceLines(for integration: String, windows: [YCodingQuotaWindow]) -> [MetricLine] {
+        func sole(_ predicate: (YCodingQuotaWindow) -> Bool) -> YCodingQuotaWindow? {
+            let matches = windows.filter(predicate)
+            return matches.count == 1 ? matches[0] : nil
+        }
+        var lines: [MetricLine] = []
+        let balanceID = integration == "openai" ? "api-credit-balance" : "prepaid-balance"
+        let balanceLabel = integration == "openai" ? "API Credit Balance" : "Prepaid Balance"
+        if let balance = sole({ $0.id == balanceID && $0.unit == .usd }), let remaining = balance.remaining {
+            lines.append(.values(label: balanceLabel, values: [MetricValue(number: remaining, kind: .dollars)]))
+        }
+        switch integration {
+        case "openai":
+            if let resets = sole({ $0.id == "reset-credits" && $0.unit == .count }), let available = resets.remaining {
+                lines.append(.values(label: "Rate Limit Resets",
+                                     values: [MetricValue(number: available.rounded(.down), kind: .count, label: "available")]))
+            }
+            if let credits = sole({ $0.id != "reset-credits" && $0.id.hasSuffix("-credits") && $0.unit == .count }),
+               credits.unlimited != true, let remaining = credits.remaining {
+                lines.append(.values(label: "Credits", values: CodexUsageMapper.creditValues(remaining: remaining)))
+            }
+        case "anthropic":
+            if let extra = sole({ $0.id == "extra-usage" && $0.unit == .usd }), let used = extra.used {
+                if let limit = extra.limit, limit > 0 {
+                    lines.append(.progress(label: "Extra usage spent", used: used, limit: limit, format: .dollars))
+                } else if used > 0 {
+                    lines.append(.values(label: "Extra usage spent", values: [MetricValue(number: used, kind: .dollars)]))
+                }
+            }
+        default:
+            break
+        }
+        return lines
     }
 
     static func snapshot(for connection: YCodingConnection, read: YCodingConnectionRead, now: Date = Date()) -> ProviderSnapshot {
         let quota = YCodingQuotaSnapshot.matching(connection, connections: read.connections, snapshots: read.quotas)
         var lines: [MetricLine] = []
         var warnings: [String] = read.warning.map { [$0] } ?? []
-        if connection.showsSubscriptionQuotas, let quota, quota.status == .available || quota.status == .stale {
-            let slots = slots(for: connection.integrationID)
+        var diagnostics: [String] = []
+        var unavailableQuota: String?
+        if let quota, quota.status == .available || quota.status == .stale {
+            let slots = connection.showsSubscriptionQuotas ? slots(for: connection.integrationID) : []
             for slot in slots {
                 let matches = quota.windows.filter {
                     matches($0, slot: slot, integration: connection.integrationID)
@@ -88,8 +156,19 @@ enum YCodingConnectionMapper {
                                        resetsAt: window.resetAt.map { Date(timeIntervalSince1970: $0 / 1000) },
                                        periodDurationMs: duration))
             }
+            lines += balanceLines(for: connection.integrationID, windows: connection.showsSubscriptionQuotas
+                                  ? quota.windows : quota.windows.filter { $0.id == "api-credit-balance" || $0.id == "prepaid-balance" })
             if quota.status == .stale { warnings.append("YCoding reports stale quotas. Refresh YCoding and try again.") }
-            if lines.isEmpty { warnings.append("YCoding has no compatible quota meters for this profile.") }
+            if quota.message == "Prepaid balance unavailable" { warnings.append("YCoding could not read the prepaid balance.") }
+            if quota.message == "API credit balance unavailable" { warnings.append("YCoding could not read the API credit balance.") }
+            if quota.message == "Organization usage unavailable" { warnings.append("YCoding could not read organization usage.") }
+            if quota.message == "Provider usage refresh failed" { warnings.append("YCoding could not refresh this profile's quotas.") }
+            if quota.message == "Provider usage credentials are unauthorized" {
+                warnings.append("YCoding could not authorize quota reporting for this connection.")
+            }
+            if lines.isEmpty && connection.showsSubscriptionQuotas {
+                warnings.append("YCoding has no compatible quota meters for this profile.")
+            }
         } else if connection.showsSubscriptionQuotas {
             switch quota?.status {
             case .unauthorized:
@@ -97,21 +176,21 @@ enum YCodingConnectionMapper {
             case .error:
                 warnings.append("YCoding could not refresh this profile's quotas.")
             default:
-                warnings.append("YCoding has no profile-bound quotas for this connection. Recorded usage is shown when available.")
+                unavailableQuota = "YCoding has no profile-bound quotas for this connection."
+            }
+        } else {
+            switch quota?.status {
+            case .unauthorized: warnings.append("YCoding could not authorize quota reporting for this API-key connection.")
+            case .error: warnings.append("YCoding could not refresh this API-key connection's usage status.")
+            default: diagnostics.append("YCoding provides no remaining credit balance for this API-key connection.")
             }
         }
+        if let unavailableQuota { diagnostics.append(unavailableQuota) }
         if connection.distinguishesAccountAndKey {
             switch connection.authentication {
-            case .apiKey:
-                if quota?.status == .unauthorized {
-                    warnings.append("YCoding could not authorize quota reporting for this API-key connection.")
-                } else if quota?.status == .error {
-                    warnings.append("YCoding could not refresh this API-key connection's usage status.")
-                }
-                warnings.append("API-key connection. YCoding does not report its remaining credit balance. Recorded usage value is shown when available.")
             case .unknown:
                 warnings.append("Connection type is unknown. YCoding did not provide a recognized account/API-key type.")
-            case .account: break
+            case .account, .apiKey: break
             }
         }
         let displaysQuota = !lines.isEmpty
@@ -135,20 +214,24 @@ enum YCodingConnectionMapper {
             let breakdown = makeModelBreakdown(for: usage, totalTokens: totalTokens)
             lines.append(.values(label: label, values: values, modelBreakdown: breakdown))
             if usage.hasIncompleteCost {
-                warnings.append("Some recorded YCoding usage cannot be priced reliably; its usage value is incomplete.")
+                diagnostics.append("Some recorded YCoding usage has no known model price; its usage value is partial.")
             }
         }
         let dailySeries = read.dailyByProfile[[connection.integrationID, connection.profile]]
             ?? fallbackDailySeries(today: matching(read.today), yesterday: matching(read.yesterday), now: now)
         SpendTileMapper.appendUsageTrend(dailySeries, to: &lines, now: now, note: usageSourceNote)
         if connection.integrationID == "muse", let usage = matching(read.last30), usage.physical > 0 {
-            warnings.append("YCoding recorded \(usage.physical) requests for this profile in the last 30 days.")
+            diagnostics.append("YCoding recorded \(usage.physical) requests for this profile in the last 30 days.")
         }
         // Upstream free-form error messages are intentionally never forwarded to the UI or logs.
         var seen = Set<String>()
         let warning = warnings.filter { seen.insert($0).inserted }.joined(separator: " ").nilIfEmpty
+        var seenDiagnostics = Set<String>()
+        for diagnostic in diagnostics where seenDiagnostics.insert(diagnostic).inserted {
+            AppLog.warn("plugin:ycoding", diagnostic)
+        }
         if lines.isEmpty {
-            let message = warning ?? "YCoding has no usage for this profile yet."
+            let message = warning ?? unavailableQuota ?? "YCoding has no usage for this profile yet."
             AppLog.warn("plugin:ycoding", message)
             var error = ProviderSnapshot.error(provider: connection.provider, message: message, category: .notAvailable)
             error.plan = connection.sourceLabel

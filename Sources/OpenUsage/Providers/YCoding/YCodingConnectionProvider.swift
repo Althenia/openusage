@@ -112,12 +112,12 @@ final class YCodingConnectionBridge {
                 AppLog.error("plugin:ycoding", notice)
             }
             var seenProfiles = Set<[String]>()
-            var distinctActive: [(providerID: String, profile: String)] = []
+            var distinctActive: [(providerID: String, profile: String, estimatedModels: [String])] = []
             for usage in reports.2 ?? [] where usage.physical > 0 {
                 let key = [usage.providerID, usage.profile]
                 if seenProfiles.insert(key).inserted,
                    before.contains(where: { $0.integrationID == usage.providerID && $0.profile == usage.profile }) {
-                    distinctActive.append((usage.providerID, usage.profile))
+                    distinctActive.append((usage.providerID, usage.profile, usage.estimatedModels))
                 }
             }
             var dailyByProfile: [[String]: DailyUsageSeries] = [:]
@@ -128,6 +128,7 @@ final class YCodingConnectionBridge {
                             let series = try await client.dailyUsage(
                                 providerID: item.providerID,
                                 profile: item.profile,
+                                estimatedModels: item.estimatedModels,
                                 from: month,
                                 to: instant.addingTimeInterval(0.001)
                             )

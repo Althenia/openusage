@@ -13,8 +13,8 @@ final class YCodingUsagePricingTests: XCTestCase {
     private func row(provider: String = "anthropic", profile: String = "Work", model: String? = "fixture-model",
                      cost: Double? = nil, priced: Int = 0, unpriced: Int = 1, physical: Int = 1,
                      input: Double = 100, output: Double = 20, reasoning: Double = 5,
-                     read: Double = 40, write: Double = 0, cacheReported: Bool? = true) -> YCodingModelUsage {
-        .init(modelID: model, cacheReadReported: cacheReported,
+                     read: Double = 40, write: Double = 0) -> YCodingModelUsage {
+        .init(modelID: model,
               usage: .init(providerID: provider, profile: profile, cost: cost,
                            costProvenance: cost == nil ? nil : "recorded",
                            costCoverage: .init(pricedRequests: priced, unpricedRequests: unpriced),
@@ -46,8 +46,7 @@ final class YCodingUsagePricingTests: XCTestCase {
     }
 
     func testMissingModelRateOrTokenCategoryNeverBecomesZeroCost() throws {
-        let sources = [row(model: nil), row(model: "unknown-model"), row(cacheReported: nil),
-                       row(cacheReported: false), row(write: 10), row(input: -1), row(input: 1.5)]
+        let sources = [row(model: nil), row(model: "unknown-model"), row(input: -1), row(input: 1.5)]
         for source in sources {
             let result = try XCTUnwrap(YCodingUsagePricing.aggregate([source], pricing: pricing()).first)
             XCTAssertNil(result.cost)
@@ -73,14 +72,57 @@ final class YCodingUsagePricingTests: XCTestCase {
         XCTAssertFalse(results[2].usesOpenUsagePricing)
     }
 
-    func testMixedPricesWithinOneModelRemainIncompleteWithoutDoubleCounting() throws {
+    func testMixedPricedAndUnpricedGroupIsEstimatedOnceFromAllItsTokens() throws {
         let mixed = row(cost: 2, priced: 1, unpriced: 1, physical: 2)
-        XCTAssertFalse(YCodingUsagePricing.needsPricing([mixed]))
+        XCTAssertTrue(YCodingUsagePricing.needsPricing([mixed]))
         let result = try XCTUnwrap(YCodingUsagePricing.aggregate([mixed], pricing: pricing()).first)
+        XCTAssertEqual(try XCTUnwrap(result.cost), 0.000458, accuracy: 1e-12)
+        XCTAssertNil(result.costProvenance)
+        XCTAssertEqual(result.estimatedRequests, 2)
+        XCTAssertTrue(result.usesOpenUsagePricing)
+        XCTAssertFalse(result.hasIncompleteCost)
+        XCTAssertEqual(result.estimatedModels, ["fixture-model"])
+    }
+
+    func testMixedGroupWithUnknownModelKeepsRecordedSubtotalAsPartial() throws {
+        let result = try XCTUnwrap(YCodingUsagePricing.aggregate(
+            [row(model: "unknown-model", cost: 2, priced: 1, unpriced: 1, physical: 2)], pricing: pricing()).first)
         XCTAssertEqual(result.cost, 2)
-        XCTAssertEqual(result.estimatedRequests, 0)
+        XCTAssertEqual(result.costProvenance, "recorded")
         XCTAssertFalse(result.usesOpenUsagePricing)
         XCTAssertTrue(result.hasIncompleteCost)
+        XCTAssertTrue(result.estimatedModels.isEmpty)
+    }
+
+    func testCacheWritesArePricedAsFiveMinuteWritesWhenCacheReadIsUnreported() throws {
+        let estimate = try XCTUnwrap(YCodingUsagePricing.estimate(row(write: 10), pricing: pricing()))
+        // 100 input × 2 + 10 write × 2.5 + 40 read × 0.2 + 25 output × 10, per million.
+        XCTAssertEqual(estimate, 0.000483, accuracy: 1e-12)
+        let unreportedReads = try XCTUnwrap(YCodingUsagePricing.estimate(row(read: 0, write: 10), pricing: pricing()))
+        XCTAssertEqual(unreportedReads, 0.000475, accuracy: 1e-12)
+    }
+
+    func testUnreportedCacheReadsArePricedAsInputWithoutMarkingThePeriodPartial() throws {
+        for reported in [false, nil] as [Bool?] {
+            var source = row()
+            source.cacheReadReported = reported
+            let result = try XCTUnwrap(YCodingUsagePricing.aggregate([source], pricing: pricing()).first)
+            XCTAssertEqual(try XCTUnwrap(result.cost), 0.000458, accuracy: 1e-12,
+                           "Input that includes unreported cached reads is priced at the input rate, an upper bound")
+            XCTAssertTrue(result.usesOpenUsagePricing)
+            XCTAssertFalse(result.hasIncompleteCost)
+        }
+    }
+
+    func testYCodingModelIDsResolveOnlyThroughExistingCatalogEntriesAndAliases() {
+        for model in ["claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5",
+                      "gemini-3.8-flash", "gemini-3.8-flash-high", "muse-spark-1.3", "gpt-6.1-sol", "gpt-6-luna"] {
+            XCTAssertNotNil(YCodingUsagePricing.estimate(row(model: model, write: 10), pricing: TestPricing.bundled), model)
+        }
+        XCTAssertEqual(TestPricing.bundled.resolve(model: "claude-fable-5-1"), TestPricing.bundled.resolve(model: "claude-fable-5.1"))
+        for model in ["muse-wonder-full-1.0-contributor", "muse-spark-1.3-contributor", "gemini-4-argon", "made-up-model"] {
+            XCTAssertNil(YCodingUsagePricing.estimate(row(model: model), pricing: TestPricing.bundled), model)
+        }
     }
 
     func testPartiallyEstimatedProfileRetainsIncompleteWarning() throws {
@@ -97,6 +139,8 @@ final class YCodingUsagePricingTests: XCTestCase {
             quotas: [], today: rows, yesterday: [], last30: [], warning: nil))
         guard case .values(_, let values, _, _, _, _) = result.line(label: "Today") else { return XCTFail("Expected value") }
         XCTAssertEqual(values.first?.label, "partial estimated usage value")
+        XCTAssertFalse(result.warning?.contains("incomplete") == true, "An incomplete subtotal is marked on its row only")
+        XCTAssertFalse(result.warning?.contains("partial") == true)
     }
 
     func testCacheDiscountMustBeExplicitAndLongContextBoundariesMustBeKnown() throws {

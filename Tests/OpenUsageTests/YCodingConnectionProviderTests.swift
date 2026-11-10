@@ -54,7 +54,7 @@ final class YCodingConnectionProviderTests: XCTestCase {
             XCTAssertNil(snapshot.errorCategory)
             XCTAssertEqual(values(snapshot, "Today").first?.number, 4.25)
             XCTAssertNil(progress(snapshot, "Session"))
-            XCTAssertTrue(snapshot.warning?.contains("no profile-bound quotas") == true)
+            XCTAssertFalse(snapshot.warning?.contains("profile-bound quotas") == true)
             XCTAssertFalse(snapshot.displayName.contains("Admin"))
         }
     }
@@ -119,9 +119,36 @@ final class YCodingConnectionProviderTests: XCTestCase {
         XCTAssertTrue(today.first?.estimated == true)
         XCTAssertEqual(today.last?.number, 15)
         XCTAssertEqual(today.last?.label, "tokens")
-        XCTAssertTrue(snapshot.warning?.contains("value is incomplete") == true)
-        XCTAssertEqual(snapshot.warning?.components(separatedBy: "value is incomplete").count, 2,
-                       "The same missing-price warning is not repeated for each period")
+        XCTAssertEqual(today.first?.label, "partial estimated usage value")
+        XCTAssertFalse(snapshot.warning?.contains("incomplete") == true)
+    }
+
+    func testMuseUsageWithoutBoundQuotaShowsNoDataMetersWithoutWarning() {
+        let profile = connection("muse", id: "muse", profile: "Work")
+        for status in [YCodingQuotaSnapshot.Status.unsupported, .available] {
+            let quotas = status == .available ? [] : [quota(profile, window: "window", status: status)]
+            let snapshot = YCodingConnectionMapper.snapshot(for: profile,
+                read: fixtureRead(connections: [profile], quotas: quotas, rows: [usage(profile, cost: nil, provenance: nil, unpriced: 1)]))
+            XCTAssertNil(snapshot.warning)
+            XCTAssertNil(snapshot.errorCategory)
+            XCTAssertNil(progress(snapshot, "Session"))
+            XCTAssertFalse(values(snapshot, "Last 30 Days").isEmpty)
+            XCTAssertTrue(YCodingConnectionMapper.descriptors(for: profile).contains { $0.title == "Session" })
+        }
+    }
+
+    func testDailySeriesRequestPassesEstimatedModelsFromLastThirtyDays() async throws {
+        let profile = connection("anthropic", id: "work", profile: "Work")
+        var row = usage(profile)
+        row.estimatedModels = ["claude-opus-5-5"]
+        let client = FixtureClient(connections: [[profile]], rows: [row])
+        _ = try await YCodingConnectionBridge(client: client, now: { Date(timeIntervalSince1970: 1_800_000_000) })
+            .read(manual: false)
+
+        let daily = await client.dailyRequests()
+        XCTAssertEqual(daily.count, 1)
+        XCTAssertEqual(daily.first?.profile, "Work")
+        XCTAssertEqual(daily.first?.models, ["claude-opus-5-5"])
     }
 
     func testUpstreamQuotaErrorBodyIsNeverReturned() {
@@ -473,6 +500,16 @@ private actor FixtureClient: YCodingConnectionReading {
         if failUsage { throw FixtureError() }
         return rows
     }
+
+    private var dailyCalls: [(profile: String, models: [String])] = []
+
+    func dailyUsage(providerID: String, profile: String, estimatedModels: [String],
+                    from: Date, to: Date) async throws -> DailyUsageSeries {
+        dailyCalls.append((profile, estimatedModels))
+        return DailyUsageSeries(daily: [])
+    }
+
+    func dailyRequests() -> [(profile: String, models: [String])] { dailyCalls }
 
     func calls() -> (connections: Int, snapshots: [Bool], usage: Int) {
         (connectionCalls, snapshotCalls, usageCalls)

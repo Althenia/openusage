@@ -135,6 +135,7 @@ struct YCodingProfileUsage: Equatable, Sendable {
     var estimatedRequests: Int = 0
     var usesOpenUsagePricing: Bool = false
     var models: [ModelUsageEntry] = []
+    var estimatedModels: [String] = []
 
     init(
         providerID: String,
@@ -146,7 +147,8 @@ struct YCodingProfileUsage: Equatable, Sendable {
         physical: Int,
         estimatedRequests: Int = 0,
         usesOpenUsagePricing: Bool = false,
-        models: [ModelUsageEntry] = []
+        models: [ModelUsageEntry] = [],
+        estimatedModels: [String] = []
     ) {
         self.providerID = providerID
         self.profile = profile
@@ -158,9 +160,10 @@ struct YCodingProfileUsage: Equatable, Sendable {
         self.estimatedRequests = estimatedRequests
         self.usesOpenUsagePricing = usesOpenUsagePricing
         self.models = models
+        self.estimatedModels = estimatedModels
     }
 
     var hasIncompleteCost: Bool {
-        cost == nil || costCoverage == nil || (costCoverage?.unpricedRequests ?? 0) > estimatedRequests
+        cost == nil || costCoverage == nil || (costCoverage?.unpricedRequests ?? 0) > 0
     }
 }

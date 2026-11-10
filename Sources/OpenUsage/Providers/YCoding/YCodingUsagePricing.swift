@@ -2,12 +2,17 @@ import Foundation
 
 struct YCodingModelUsage: Sendable {
     let modelID: String?
-    let cacheReadReported: Bool?
+    var cacheReadReported: Bool? = true
     let usage: YCodingProfileUsage
 }
 
-/// Model-group reports retain profile attribution and recorded prices. Their token totals include
-/// priced and unpriced requests, so only a wholly unpriced group can receive a local estimate.
+/// YCoding records token counts per request but prices only some of them. Any model group with
+/// unpriced requests is valued from all of its tokens through the shared pricing engine, replacing
+/// a partial recorded subtotal, so the same tokens are never counted twice. When `cacheReadReported`
+/// is false, `tokens.input` includes cached reads YCoding could not break out; they are priced at the
+/// input rate, so the estimate is an upper bound. A mixed model-day in the Usage Trend likewise
+/// replaces that model's recorded day subtotal with this estimate, and days with models that cannot
+/// be priced are understated without a per-day partial marker.
 enum YCodingUsagePricing {
     static func needsPricing(_ rows: [YCodingModelUsage]) -> Bool {
         rows.contains { eligibleTokens($0) != nil }
@@ -17,13 +22,7 @@ enum YCodingUsagePricing {
         var order: [[String]] = []
         var totals: [[String]: YCodingProfileUsage] = [:]
         for row in rows {
-            var usage = row.usage
-            if let estimate = estimate(row, pricing: pricing) {
-                // A finite recorded zero is authoritative too; eligibility requires absent cost.
-                usage = .init(providerID: usage.providerID, profile: usage.profile, cost: estimate,
-                              costProvenance: nil, costCoverage: usage.costCoverage, tokens: usage.tokens,
-                              physical: usage.physical, estimatedRequests: usage.physical, usesOpenUsagePricing: true)
-            }
+            var usage = priced(row, pricing: pricing)
             let totalTokens = usage.tokens.input + usage.tokens.output + usage.tokens.reasoning + usage.tokens.cache.read + usage.tokens.cache.write
             if usage.physical > 0 {
                 let modelName = row.modelID?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? ModelUsageEntry.unattributedModelName
@@ -43,14 +42,21 @@ enum YCodingUsagePricing {
         return order.compactMap { totals[$0] }
     }
 
+    static func priced(_ row: YCodingModelUsage, pricing: ModelPricing) -> YCodingProfileUsage {
+        let usage = row.usage
+        guard let estimate = estimate(row, pricing: pricing), let model = row.modelID else { return usage }
+        return .init(providerID: usage.providerID, profile: usage.profile, cost: estimate, costProvenance: nil,
+                     costCoverage: .init(pricedRequests: usage.physical, unpricedRequests: 0), tokens: usage.tokens,
+                     physical: usage.physical, estimatedRequests: usage.physical, usesOpenUsagePricing: true,
+                     estimatedModels: [model])
+    }
+
     static func estimate(_ row: YCodingModelUsage, pricing: ModelPricing) -> Double? {
         guard let tokens = eligibleTokens(row), let model = row.modelID,
               let rates = pricing.resolve(model: model) else { return nil }
-        // Do not use the catalog codec's assumed cache discount when no rate was published.
         guard tokens.cacheRead == 0 || rates.cacheReadIsExplicit else { return nil }
         let tiered = [rates.inputAbove200kPerMillion, rates.outputAbove200kPerMillion,
                       rates.cacheReadAbove200kPerMillion, rates.cacheWriteAbove200kPerMillion].contains { $0 != nil }
-        // Aggregates cannot establish which individual prompts crossed a pricing tier.
         guard row.usage.physical == 1 || !tiered || tokens.promptTokens <= rates.longContextThresholdTokens else { return nil }
         guard let value = pricing.estimatedCostDollars(model: model, tokens: tokens,
                                                       applyLongContextRates: row.usage.physical == 1),
@@ -60,21 +66,13 @@ enum YCodingUsagePricing {
 
     private static func eligibleTokens(_ row: YCodingModelUsage) -> TokenBreakdown? {
         let usage = row.usage
-        guard usage.cost == nil, usage.physical > 0,
-              usage.costCoverage?.pricedRequests == 0,
-              usage.costCoverage?.unpricedRequests == usage.physical,
-              let model = row.modelID, !model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              row.cacheReadReported == true else { return nil }
+        guard usage.physical > 0, usage.cost == nil || (usage.costCoverage?.unpricedRequests ?? 0) > 0,
+              let model = row.modelID, !model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         let tokens = usage.tokens
-        // YCoding collapses cache writes into one bucket without the 5m/1h lifetime. An estimate
-        // must not silently price unknown-lifetime writes as five-minute writes.
-        guard tokens.cache.write == 0 else { return nil }
-        let values = [tokens.input, tokens.output, tokens.reasoning, tokens.cache.read]
+        let values = [tokens.input, tokens.output, tokens.reasoning, tokens.cache.read, tokens.cache.write]
         guard values.allSatisfy({ $0.isFinite && $0 >= 0 && $0 <= 1_000_000_000_000_000 && Int(exactly: $0) != nil }) else { return nil }
-        // YCoding's normalized input excludes cache reads/writes; output excludes reasoning.
-        // Each bucket is included once, matching the public normalized usage contract.
-        return TokenBreakdown(input: Int(tokens.input), cacheRead: Int(tokens.cache.read),
-                              output: Int(tokens.output) + Int(tokens.reasoning))
+        return TokenBreakdown(input: Int(tokens.input), cacheWrite5m: Int(tokens.cache.write),
+                              cacheRead: Int(tokens.cache.read), output: Int(tokens.output) + Int(tokens.reasoning))
     }
 
     private static func merge(_ lhs: YCodingProfileUsage, _ rhs: YCodingProfileUsage) throws -> YCodingProfileUsage {
@@ -106,6 +104,7 @@ enum YCodingUsagePricing {
                      physical: try count(lhs.physical, rhs.physical),
                      estimatedRequests: try count(lhs.estimatedRequests, rhs.estimatedRequests),
                      usesOpenUsagePricing: lhs.usesOpenUsagePricing || rhs.usesOpenUsagePricing,
-                     models: lhs.models + rhs.models)
+                     models: lhs.models + rhs.models,
+                     estimatedModels: lhs.estimatedModels + rhs.estimatedModels)
     }
 }
